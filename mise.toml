@@ -1,2 +1,6 @@
 [tools]
 node = "24"
+java = "temurin-21"
+
+[env]
+ANDROID_HOME = "{{env.HOME}}/Android/Sdk"

@@ -56,3 +56,15 @@ describe("wire format", () => {
     ]);
   });
 });
+
+describe("base64", () => {
+  it("round-trips every length and ignores padding and stray characters", async () => {
+    const { base64Decode, base64Encode } = await import("../src/bytes.ts");
+    for (let len = 0; len < 70; len++) {
+      const b = Uint8Array.from({ length: len }, (_, i) => (i * 37 + len) & 0xff);
+      expect(base64Decode(base64Encode(b))).toEqual(b);
+      expect(base64Encode(b)).toBe(Buffer.from(b).toString("base64"));
+    }
+    expect(base64Decode("aGVs\nbG8=")).toEqual(new TextEncoder().encode("hello"));
+  });
+});

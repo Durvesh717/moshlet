@@ -90,20 +90,30 @@ export function utf8Decode(b: Uint8Array): string {
 
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
+const B64_INDEX = (() => {
+  const t = new Int16Array(128).fill(-1);
+  for (let i = 0; i < 64; i++) t[B64.charCodeAt(i)] = i;
+  return t;
+})();
+
+/** Decodes base64 (padding and stray characters ignored). Hot path: every mosh datagram from the native UDP module. */
 export function base64Decode(s: string): Uint8Array {
-  const clean = s.replace(/[^A-Za-z0-9+/]/g, "");
-  const out: number[] = [];
+  const out = new Uint8Array(Math.floor((s.length * 3) / 4) + 3);
+  let n = 0;
   let acc = 0;
   let bits = 0;
-  for (const ch of clean) {
-    acc = (acc << 6) | B64.indexOf(ch);
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    const v = c < 128 ? B64_INDEX[c] : -1;
+    if (v < 0) continue;
+    acc = ((acc << 6) | v) & 0xffffff;
     bits += 6;
     if (bits >= 8) {
       bits -= 8;
-      out.push((acc >> bits) & 0xff);
+      out[n++] = (acc >> bits) & 0xff;
     }
   }
-  return Uint8Array.from(out);
+  return out.subarray(0, n);
 }
 
 export function base64Encode(b: Uint8Array): string {
