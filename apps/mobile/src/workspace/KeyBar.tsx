@@ -7,15 +7,18 @@ import { IconButton, KeyCap, KeyLabel } from "../ui/kit";
 
 type Key = { label: string; bytes: string | null; desc: string };
 
+// Arrows go out in application form, like a terminal running mosh; mosh-server turns them into the
+// normal form whenever the program on the far side hasn't asked for application cursor keys.
+
 const TYPING: Key[] = [
   { label: "esc", bytes: "\x1b", desc: "Escape" },
   { label: "tab", bytes: "\t", desc: "Tab" },
   { label: "ctrl", bytes: null, desc: "Control" },
   { label: "alt", bytes: null, desc: "Alt" },
-  { label: "←", bytes: "\x1b[D", desc: "Left" },
-  { label: "↑", bytes: "\x1b[A", desc: "Up" },
-  { label: "↓", bytes: "\x1b[B", desc: "Down" },
-  { label: "→", bytes: "\x1b[C", desc: "Right" },
+  { label: "←", bytes: "\x1bOD", desc: "Left" },
+  { label: "↑", bytes: "\x1bOA", desc: "Up" },
+  { label: "↓", bytes: "\x1bOB", desc: "Down" },
+  { label: "→", bytes: "\x1bOC", desc: "Right" },
   { label: "/", bytes: "/", desc: "Slash" },
 ];
 
@@ -23,8 +26,8 @@ const IDLE: Key[] = [
   { label: "esc", bytes: "\x1b", desc: "Escape" },
   { label: "^C", bytes: "\x03", desc: "Control C" },
   { label: "⇧⇥", bytes: "\x1b[Z", desc: "Shift Tab" },
-  { label: "↑", bytes: "\x1b[A", desc: "Up" },
-  { label: "↓", bytes: "\x1b[B", desc: "Down" },
+  { label: "↑", bytes: "\x1bOA", desc: "Up" },
+  { label: "↓", bytes: "\x1bOB", desc: "Down" },
   { label: "⏎", bytes: "\r", desc: "Enter" },
 ];
 
