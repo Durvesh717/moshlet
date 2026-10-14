@@ -1,7 +1,7 @@
 import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@corral/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2 } from "lucide-react-native";
-import { forwardRef, useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { C, F, R } from "../theme";
 import { StatusGlyph } from "../ui/kit";
@@ -211,11 +211,15 @@ export function useTextPrompt() {
 
 export function TextPromptSheet(props: { state: { title: string; initial: string } | null; done(v: string | null): void }) {
   const [value, setValue] = useState("");
-  const ref = useCallback((r: BottomSheetModal | null) => r && props.state && r.present(), [props.state]);
-  useEffect(() => setValue(props.state?.initial ?? ""), [props.state]);
+  const sheet = useRef<BottomSheetModal>(null);
+  useEffect(() => {
+    setValue(props.state?.initial ?? "");
+    // Present once per prompt: presenting again snaps the sheet back down under the keyboard.
+    if (props.state) sheet.current?.present();
+  }, [props.state]);
   if (!props.state) return null;
   return (
-    <BottomSheetModal ref={ref} {...sheetProps} onDismiss={() => props.done(null)}>
+    <BottomSheetModal ref={sheet} {...sheetProps} onDismiss={() => props.done(null)}>
       <BottomSheetScrollView contentContainerStyle={styles.sheet}>
         <Text style={styles.title}>{props.state.title}</Text>
         <BottomSheetTextInput value={value} onChangeText={setValue} autoFocus style={styles.reply} placeholderTextColor={C.faint} />
