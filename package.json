@@ -1,6 +1,16 @@
 {
   "name": "corral",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
-  "engines": { "node": ">=22" }
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "agent": "node apps/agent/src/main.ts"
+  }
 }

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
-import { hostname } from "node:os";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, hostname } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { AGENT_PORT } from "@corral/core";
 import { control, startControl, type ControlInfo } from "./control.ts";
 import { DeviceStore, type Device } from "./devices.ts";
@@ -15,6 +18,8 @@ const USAGE = `corral-agent ${VERSION}: lets Corral on your phone reach herdr on
   corral-agent pair               show a one-time code to pair a phone or tablet
   corral-agent devices            list paired devices
   corral-agent revoke <id>        unpair a device
+  corral-agent install            run it as a systemd user service (starts now and at login)
+  corral-agent uninstall          remove that service
 `;
 
 const log = (msg: string) => console.log(`${new Date().toTimeString().slice(0, 8)} ${msg}`);
@@ -76,12 +81,54 @@ async function revoke(id: string | undefined): Promise<void> {
   console.log(revoked ? `Revoked ${id}.` : `No device ${id}.`);
 }
 
+const UNIT = "corral-agent.service";
+const unitPath = () => join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "systemd/user", UNIT);
+
+async function install(): Promise<void> {
+  const main = fileURLToPath(new URL("./main.ts", import.meta.url));
+  const unit = [
+    "[Unit]",
+    "Description=Corral agent: herdr for the Corral app, over Tailscale",
+    "After=network-online.target",
+    "",
+    "[Service]",
+    `ExecStart=${process.execPath} ${main} serve`,
+    // The service needs the same herdr, mosh-server and tailscale this shell finds.
+    `Environment=PATH=${process.env.PATH ?? "/usr/bin:/bin"}`,
+    `Environment=LANG=${process.env.LANG ?? "C.UTF-8"}`,
+    "Restart=on-failure",
+    "RestartSec=5",
+    "",
+    "[Install]",
+    "WantedBy=default.target",
+    "",
+  ].join("\n");
+  mkdirSync(dirname(unitPath()), { recursive: true });
+  writeFileSync(unitPath(), unit);
+  execFileSync("systemctl", ["--user", "daemon-reload"]);
+  execFileSync("systemctl", ["--user", "enable", "--now", UNIT]);
+  console.log(`Installed and started ${unitPath()}.\nLogs: journalctl --user -u corral-agent -f\nNext: corral-agent pair`);
+}
+
+async function uninstall(): Promise<void> {
+  try {
+    execFileSync("systemctl", ["--user", "disable", "--now", UNIT]);
+  } catch {
+    // not enabled
+  }
+  rmSync(unitPath(), { force: true });
+  execFileSync("systemctl", ["--user", "daemon-reload"]);
+  console.log("Removed the corral-agent service. Paired devices are kept; delete ~/.config/corral-agent to forget them.");
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 const commands: Record<string, () => Promise<void>> = {
   serve: () => serve(rest),
   pair,
   devices,
   revoke: () => revoke(rest[0]),
+  install,
+  uninstall,
 };
 const run = commands[cmd ?? ""];
 if (cmd === "--version") console.log(VERSION);
