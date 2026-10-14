@@ -1,0 +1,6 @@
+{
+  "name": "corral",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "engines": { "node": ">=22" }
+}
