@@ -6,6 +6,8 @@ export { MoshError, MoshProtocol, SHUTDOWN_NUM } from "./mosh/protocol.ts";
 export { charWidth } from "./term/charWidth.ts";
 export { Interpreter } from "./term/interpreter.ts";
 export { Screen } from "./term/screen.ts";
+export { KEY_FIELD_SENTINELS, KeyField, keyFieldEdit } from "./term/keyField.ts";
+export type { KeyFieldEdit } from "./term/keyField.ts";
 export { historyAbove, layoutScrollback } from "./term/scrollback.ts";
 export * from "./term/style.ts";
 export * from "./herdr/model.ts";

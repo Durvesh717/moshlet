@@ -1,4 +1,4 @@
-import type { Cell, MoshClient, Screen } from "@corral/core";
+import { KeyField, type Cell, type MoshClient, type Screen } from "@corral/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
@@ -39,8 +39,6 @@ export interface TerminalViewProps {
   onTouchStart(): void;
   onFocusChange(focused: boolean): void;
 }
-
-const SENTINEL = "\u200b";
 
 function emptyPicture(): SkPicture {
   const rec = Skia.PictureRecorder();
@@ -217,6 +215,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   const axis = useRef<"none" | "v" | "h">("none");
   const lastY = useRef(0);
   const pinchStart = useRef(props.fontSize);
+  // Declared before the gestures: their callbacks capture it when they are built.
+  const input = useRef<TextInput>(null);
 
   const gesture = useMemo(() => {
     const pan = Gesture.Pan()
@@ -278,9 +278,10 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, wheel, setScroll, redraw, updateGrid]);
 
-  // ---- keyboard: a hidden input holding one sentinel character, so every edit is a delta
-  const input = useRef<TextInput>(null);
-  const [value, setValue] = useState(SENTINEL);
+  // ---- keyboard: a hidden input reset to a sentinel between edits, so every edit is a delta
+  const keyField = useRef<KeyField>(null);
+  keyField.current ??= new KeyField();
+  const [value, setValue] = useState(keyField.current.target);
 
   const send = useCallback(
     (text: string) => {
@@ -305,15 +306,12 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   );
 
   const onChangeText = (next: string) => {
-    if (!next.startsWith(SENTINEL)) {
-      // The sentinel was deleted: one backspace per missing character.
-      const removed = Math.max(1, SENTINEL.length - next.length);
-      for (let i = 0; i < removed; i++) p.current.onInput(Uint8Array.of(0x7f));
-    } else {
-      send(next.slice(SENTINEL.length).replace(/\n/g, "\r"));
-    }
-    setValue(next);
-    requestAnimationFrame(() => setValue(SENTINEL));
+    const keys = keyField.current!;
+    const { deletes, text } = keys.change(next);
+    for (let i = 0; i < deletes; i++) p.current.onInput(Uint8Array.of(0x7f));
+    send(text.replace(/\n/g, "\r"));
+    // While a reset is still on its way the target is unchanged; TextInput resends it after every change.
+    setValue(keys.target);
   };
 
   useImperativeHandle(ref, () => ({
@@ -346,11 +344,6 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         value={value}
         onChangeText={onChangeText}
         onSubmitEditing={() => send("\r")}
-        onKeyPress={(e) => {
-          if (e.nativeEvent.key === "Backspace" && value === SENTINEL && Platform.OS === "ios") {
-            // iOS sends Backspace on an "empty" field without a text change.
-          }
-        }}
         onFocus={() => {
           focused.current = true;
           props.onFocusChange(true);
