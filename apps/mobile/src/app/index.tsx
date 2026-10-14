@@ -1,39 +1,117 @@
-import { Interpreter, Screen, Sealer, utf8Encode } from "@corral/core";
-import { Canvas, RoundedRect } from "@shopify/react-native-skia";
-import { StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
+import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { deleteToken, saveHosts, type Host } from "../lib/hosts";
+import { openHost } from "../lib/session";
+import { toast, useApp } from "../lib/store";
+import { unlock } from "../lib/unlock";
+import { C, F, R } from "../theme";
+import { SectionLabel } from "../ui/kit";
 
-function selfTest(): string[] {
-  const out: string[] = [];
-  const key = Uint8Array.from({ length: 16 }, (_, i) => i);
-  const sealer = new Sealer(key);
-  const sealed = sealer.seal((1n << 63n) | 7n, utf8Encode("hello mosh"));
-  out.push(`ocb round trip: ${sealer.open(sealed) ? "ok" : "FAILED"}`);
-  const s = new Screen(20, 2);
-  Interpreter.apply(s, utf8Encode("\x1b[1;35mcorral\x1b[0m ⚠️ ok"));
-  out.push(`interpreter: "${s.rowText(0)}"`);
-  return out;
-}
+export default function Hosts() {
+  const hosts = useApp((s) => s.hosts);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-export default function Index() {
-  const lines = selfTest();
+  const open = async (host: Host) => {
+    if (!(await unlock(`Open ${host.name}`))) return;
+    const updated = { ...host, lastUsedAt: Date.now() };
+    const list = useApp.getState().hosts.map((h) => (h.id === host.id ? updated : h));
+    useApp.setState({ hosts: list });
+    void saveHosts(list);
+    openHost(updated);
+    router.push("/workspace");
+  };
+
+  const forget = (host: Host) => {
+    Alert.alert(`Forget ${host.name}?`, "This device will need a new pairing code to connect again.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Forget",
+        style: "destructive",
+        onPress: async () => {
+          const list = useApp.getState().hosts.filter((h) => h.id !== host.id);
+          useApp.setState({ hosts: list });
+          await saveHosts(list);
+          await deleteToken(host.id);
+          toast(`Forgot ${host.name}`);
+        },
+      },
+    ]);
+  };
+
+  const sorted = [...hosts].sort((a, b) => (b.lastUsedAt ?? b.addedAt) - (a.lastUsedAt ?? a.addedAt));
+
   return (
-    <View style={styles.root}>
-      <Canvas style={styles.canvas}>
-        <RoundedRect x={0} y={0} width={56} height={56} r={16} color="#7C4DFF" />
-      </Canvas>
-      <Text style={styles.title}>Corral</Text>
-      {lines.map((l) => (
-        <Text key={l} style={styles.line}>
-          {l}
-        </Text>
-      ))}
-    </View>
+    <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.brand}>
+        <View style={styles.logo}>
+          <Text style={styles.logoText}>c</Text>
+        </View>
+        <View>
+          <Text style={styles.title}>Corral</Text>
+          <Text style={styles.subtitle}>your coding agents, in your pocket</Text>
+        </View>
+      </View>
+
+      <SectionLabel>Computers</SectionLabel>
+      {sorted.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No computers yet</Text>
+          <Text style={styles.emptyBody}>
+            Install corral-agent on the computer running herdr, run <Text style={styles.code}>corral-agent pair</Text>, then add it here with the code it shows.
+          </Text>
+        </View>
+      ) : (
+        sorted.map((h) => (
+          <Pressable key={h.id} onPress={() => void open(h)} onLongPress={() => forget(h)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}>
+            <View style={styles.cardIcon}>
+              <Monitor size={22} color={C.accent} />
+            </View>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={styles.cardTitle}>{h.name}</Text>
+              <Text style={styles.cardSub} numberOfLines={1}>
+                {h.address} · {h.session}
+              </Text>
+            </View>
+            <ChevronRight size={20} color={C.faint} />
+          </Pressable>
+        ))
+      )}
+
+      <Pressable onPress={() => router.push("/pair")} style={({ pressed }) => [styles.add, pressed && { opacity: 0.8 }]}>
+        <Plus size={20} color={C.text} />
+        <Text style={styles.addText}>Add a computer</Text>
+      </Pressable>
+      {sorted.length > 0 && (
+        <View style={styles.hint}>
+          <Trash2 size={13} color={C.faint} />
+          <Text style={styles.hintText}>Long-press a computer to forget it.</Text>
+        </View>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: "#0B0812" },
-  canvas: { width: 56, height: 56 },
-  title: { color: "#F4F0FF", fontSize: 28, fontWeight: "700" },
-  line: { color: "#B9AED6", fontSize: 14, fontFamily: "monospace" },
+  root: { flex: 1, backgroundColor: C.ground },
+  content: { paddingHorizontal: 20, gap: 14 },
+  brand: { flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 18 },
+  logo: { width: 56, height: 56, borderRadius: 18, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center" },
+  logoText: { fontFamily: F.bold, fontSize: 28, color: "#fff", marginTop: -2 },
+  title: { fontFamily: F.bold, fontSize: 30, color: C.text },
+  subtitle: { fontFamily: F.regular, fontSize: 15, color: C.muted },
+  empty: { backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: R.xl, padding: 20, gap: 8 },
+  emptyTitle: { fontFamily: F.semibold, fontSize: 17, color: C.text },
+  emptyBody: { fontFamily: F.regular, fontSize: 15, lineHeight: 22, color: C.muted },
+  code: { fontFamily: F.mono, color: C.accent },
+  card: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.surface, borderColor: C.line2, borderWidth: 1, borderRadius: R.xl, padding: 16 },
+  cardIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
+  cardTitle: { fontFamily: F.semibold, fontSize: 18, color: C.text },
+  cardSub: { fontFamily: F.mono, fontSize: 12, color: C.faint },
+  add: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 56, borderRadius: R.xl, borderWidth: 1, borderColor: C.line2, borderStyle: "dashed" },
+  addText: { fontFamily: F.medium, fontSize: 16, color: C.text },
+  hint: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
+  hintText: { fontFamily: F.regular, fontSize: 13, color: C.faint },
 });

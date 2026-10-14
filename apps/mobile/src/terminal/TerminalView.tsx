@@ -1,0 +1,400 @@
+import type { Cell, MoshClient, Screen } from "@corral/core";
+import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSharedValue } from "react-native-reanimated";
+import { TERMINAL_FONTS } from "../theme";
+import { Renderer } from "./renderer";
+
+export interface TerminalViewHandle {
+  focus(): void;
+  blur(): void;
+  /** Scrolls the live pane back to the bottom (after live scrolling). */
+  wheelToBottom(): void;
+  cols(): number;
+}
+
+export interface TerminalViewProps {
+  client: MoshClient | null;
+  /** Changes when a different pane is shown: resets scrolling state. */
+  paneKey: string | null;
+  history: readonly (readonly Cell[])[];
+  historyMode: boolean;
+  fontSize: number;
+  /** Rows a wheel notch moves the content: herdr's own history 3, Claude Code and similar apps 1. */
+  rowsPerNotch: number;
+  ctrl: boolean;
+  alt: boolean;
+  onModifiersUsed(): void;
+  onInput(bytes: Uint8Array): void;
+  onGrid(cols: number, rows: number): void;
+  onSwipe(direction: 1 | -1): void;
+  onLongPress(): void;
+  onFontSize(size: number): void;
+  /** History mode reached the live screen again. */
+  onLeaveHistory(): void;
+  /** Wheel notches the live pane is scrolled up by (0 = at the bottom). */
+  onRemoteScroll(notches: number): void;
+  onTouchStart(): void;
+  onFocusChange(focused: boolean): void;
+}
+
+const SENTINEL = "\u200b";
+
+function emptyPicture(): SkPicture {
+  const rec = Skia.PictureRecorder();
+  rec.beginRecording(Skia.XYWHRect(0, 0, 1, 1));
+  return rec.finishRecordingAsPicture();
+}
+const encoder = new TextEncoder();
+
+export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function TerminalView(props, ref) {
+  const p = useRef(props);
+  p.current = props;
+
+  // ---- fonts and renderer
+  const regular = useTypeface(TERMINAL_FONTS["JetBrains Mono"][0]);
+  const bold = useTypeface(TERMINAL_FONTS["JetBrains Mono"][1]);
+  const symRegular = useTypeface(TERMINAL_FONTS["Adwaita Mono"][0]);
+  const symBold = useTypeface(TERMINAL_FONTS["Adwaita Mono"][1]);
+  const provider = useFonts(TERMINAL_FONTS);
+  const renderer = useMemo(
+    () => (regular && bold && symRegular && symBold ? new Renderer({ regular, bold, symRegular, symBold, provider }, props.fontSize, PixelRatio.get()) : null),
+    // The font size is applied separately so pinching doesn't rebuild the renderer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [regular, bold, symRegular, symBold, provider],
+  );
+
+  const picture = useSharedValue<SkPicture>(emptyPicture());
+  const size = useRef({ width: 0, height: 0 });
+  const grid = useRef({ cols: 0, rows: 0 });
+  const screen = useRef<Screen | null>(null);
+  const focused = useRef(false);
+  const scrollPx = useRef(0);
+  const frameQueued = useRef(false);
+
+  const redrawNow = useCallback(() => {
+    frameQueued.current = false;
+    const s = screen.current;
+    const { width, height } = size.current;
+    if (!renderer || !s || width === 0) return;
+    picture.value = renderer.render({
+      screen: s,
+      history: p.current.historyMode ? p.current.history : [],
+      scrollPx: p.current.historyMode ? scrollPx.current : 0,
+      width,
+      height,
+      focused: focused.current,
+    });
+  }, [renderer, picture]);
+
+  const redraw = useCallback(() => {
+    if (frameQueued.current) return;
+    frameQueued.current = true;
+    requestAnimationFrame(redrawNow);
+  }, [redrawNow]);
+
+  const updateGrid = useCallback(() => {
+    if (!renderer) return;
+    const g = renderer.grid(size.current.width, size.current.height);
+    if (g.cols !== grid.current.cols || g.rows !== grid.current.rows) {
+      grid.current = g;
+      p.current.onGrid(g.cols, g.rows);
+    }
+  }, [renderer]);
+
+  useEffect(() => {
+    if (!renderer) return;
+    if (renderer.fontSize !== props.fontSize) renderer.setFontSize(props.fontSize);
+    updateGrid();
+    redraw();
+  }, [renderer, props.fontSize, updateGrid, redraw]);
+
+  // ---- frames straight from the mosh client (no React state per frame)
+  useEffect(() => {
+    const c = props.client;
+    if (!c) return;
+    screen.current = c.screen;
+    redraw();
+    return c.onScreen((s) => {
+      screen.current = s;
+      redraw();
+    });
+  }, [props.client, redraw]);
+
+  // ---- scrolling: live (wheel events to the pane) and local (History mode)
+  const live = useRef({ notches: 0, accum: 0, col: 1, row: 1 });
+  const fling = useRef<{ raf: number; local: boolean } | null>(null);
+
+  const setScroll = useCallback(
+    (px: number) => {
+      const max = p.current.history.length * (renderer?.cellH ?? 1);
+      const next = Math.min(Math.max(px, 0), max);
+      const wasBack = scrollPx.current > 0;
+      scrollPx.current = next;
+      if (wasBack && next === 0) p.current.onLeaveHistory();
+      redraw();
+    },
+    [renderer, redraw],
+  );
+
+  const setNotches = (n: number) => {
+    if (n === live.current.notches) return;
+    live.current.notches = n;
+    p.current.onRemoteScroll(n);
+  };
+
+  const sendWheel = useCallback((up: boolean) => {
+    const s = screen.current;
+    if (!s || s.mouseMode === 0) return;
+    if (!up && live.current.notches === 0 && fling.current) return;
+    setNotches(up ? live.current.notches + 1 : Math.max(0, live.current.notches - 1));
+    const button = up ? 64 : 65;
+    const { col, row } = live.current;
+    const seq = s.mouseEncoding === 1006 ? `\x1b[<${button};${col};${row}M` : `\x1b[M${String.fromCharCode(32 + button, 32 + col, 32 + row)}`;
+    p.current.onInput(encoder.encode(seq));
+  }, []);
+
+  /** Turns finger travel into wheel notches, rowsPerNotch rows each, so the content keeps pace with the finger. */
+  const wheel = useCallback(
+    (dy: number) => {
+      const step = (renderer?.cellH ?? 20) * p.current.rowsPerNotch;
+      live.current.accum += dy;
+      while (live.current.accum >= step) {
+        sendWheel(true);
+        live.current.accum -= step;
+      }
+      while (live.current.accum <= -step) {
+        sendWheel(false);
+        live.current.accum += step;
+      }
+    },
+    [renderer, sendWheel],
+  );
+
+  const stopFling = () => {
+    if (fling.current) cancelAnimationFrame(fling.current.raf);
+    fling.current = null;
+  };
+
+  const startFling = (velocity: number, local: boolean) => {
+    stopFling();
+    let v = velocity;
+    let last = performance.now();
+    const step = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      v *= Math.exp(-dt / 0.35);
+      if (Math.abs(v) < 60) {
+        fling.current = null;
+        return;
+      }
+      if (local) setScroll(scrollPx.current + v * dt);
+      else wheel(v * dt);
+      if (fling.current) fling.current.raf = requestAnimationFrame(step);
+    };
+    fling.current = { raf: requestAnimationFrame(step), local };
+  };
+
+  useEffect(() => {
+    // A new pane starts at its bottom, with no scroll of ours to undo.
+    stopFling();
+    live.current = { notches: 0, accum: 0, col: 1, row: 1 };
+    p.current.onRemoteScroll(0);
+    scrollPx.current = 0;
+  }, [props.paneKey]);
+
+  useEffect(() => {
+    // Entering History mode shows the screen above; leaving it returns to live.
+    if (!renderer) return;
+    scrollPx.current = props.historyMode ? Math.min(props.history.length, grid.current.rows) * renderer.cellH : 0;
+    redraw();
+  }, [props.historyMode, props.history, renderer, redraw]);
+
+  // ---- gestures
+  const axis = useRef<"none" | "v" | "h">("none");
+  const lastY = useRef(0);
+  const pinchStart = useRef(props.fontSize);
+
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(6)
+      .onBegin((e) => {
+        stopFling();
+        axis.current = "none";
+        lastY.current = 0;
+        live.current.accum = 0;
+        const cw = renderer?.cellW ?? 8;
+        const ch = renderer?.cellH ?? 16;
+        live.current.col = Math.min(Math.max(Math.floor(e.x / cw), 0), Math.max(0, grid.current.cols - 1)) + 1;
+        live.current.row = Math.min(Math.max(Math.floor(e.y / ch), 0), Math.max(0, grid.current.rows - 1)) + 1;
+        p.current.onTouchStart();
+      })
+      .onUpdate((e) => {
+        if (axis.current === "none") axis.current = Math.abs(e.translationY) >= Math.abs(e.translationX) ? "v" : "h";
+        const dy = e.translationY - lastY.current;
+        lastY.current = e.translationY;
+        if (axis.current !== "v") return;
+        // Content follows the finger: dragging down reveals older rows.
+        if (p.current.historyMode) setScroll(scrollPx.current + dy);
+        else wheel(dy);
+      })
+      .onEnd((e) => {
+        if (axis.current === "v") {
+          if (Math.abs(e.velocityY) > 200) startFling(e.velocityY, p.current.historyMode);
+        } else if (axis.current === "h") {
+          if (Math.abs(e.translationX) > size.current.width * 0.25 && Math.abs(e.velocityX) > 500) p.current.onSwipe(e.translationX < 0 ? 1 : -1);
+        }
+      });
+    const tap = Gesture.Tap()
+      .runOnJS(true)
+      .onEnd(() => input.current?.focus());
+    const longPress = Gesture.LongPress()
+      .runOnJS(true)
+      .minDuration(450)
+      .onStart(() => p.current.onLongPress());
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onBegin(() => {
+        pinchStart.current = p.current.fontSize;
+      })
+      .onUpdate((e) => {
+        if (!renderer) return;
+        const next = Math.min(22, Math.max(8, pinchStart.current * e.scale));
+        renderer.setFontSize(next);
+        redraw();
+      })
+      .onEnd(() => {
+        if (!renderer) return;
+        const committed = Math.round(renderer.fontSize * 2) / 2;
+        renderer.setFontSize(committed);
+        updateGrid();
+        p.current.onFontSize(committed);
+      });
+    return Gesture.Simultaneous(pinch, Gesture.Exclusive(pan, longPress, tap));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderer, wheel, setScroll, redraw, updateGrid]);
+
+  // ---- keyboard: a hidden input holding one sentinel character, so every edit is a delta
+  const input = useRef<TextInput>(null);
+  const [value, setValue] = useState(SENTINEL);
+
+  const send = useCallback(
+    (text: string) => {
+      if (text === "") return;
+      let out = text;
+      const { ctrl, alt } = p.current;
+      if (ctrl || alt) {
+        const first = String.fromCodePoint(out.codePointAt(0)!);
+        let head = ctrl ? ctrlOf(first) : first;
+        if (alt) head = "\x1b" + head;
+        out = head + out.slice(first.length);
+        p.current.onModifiersUsed();
+      }
+      // Typing returns to the live screen; herdr also snaps a scrolled pane to the bottom on input.
+      stopFling();
+      setNotches(0);
+      if (p.current.historyMode) p.current.onLeaveHistory();
+      p.current.onInput(encoder.encode(out));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const onChangeText = (next: string) => {
+    if (!next.startsWith(SENTINEL)) {
+      // The sentinel was deleted: one backspace per missing character.
+      const removed = Math.max(1, SENTINEL.length - next.length);
+      for (let i = 0; i < removed; i++) p.current.onInput(Uint8Array.of(0x7f));
+    } else {
+      send(next.slice(SENTINEL.length).replace(/\n/g, "\r"));
+    }
+    setValue(next);
+    requestAnimationFrame(() => setValue(SENTINEL));
+  };
+
+  useImperativeHandle(ref, () => ({
+    focus: () => input.current?.focus(),
+    blur: () => input.current?.blur(),
+    wheelToBottom: () => {
+      stopFling();
+      const n = live.current.notches + 2;
+      for (let i = 0; i < n; i++) sendWheel(false);
+      setNotches(0);
+    },
+    cols: () => grid.current.cols,
+  }));
+
+  const onLayout = (e: LayoutChangeEvent) => {
+    size.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
+    updateGrid();
+    redraw();
+  };
+
+  return (
+    <View style={styles.root} onLayout={onLayout}>
+      <GestureDetector gesture={gesture}>
+        <Canvas style={StyleSheet.absoluteFill}>
+          <Picture picture={picture} />
+        </Canvas>
+      </GestureDetector>
+      <TextInput
+        ref={input}
+        value={value}
+        onChangeText={onChangeText}
+        onSubmitEditing={() => send("\r")}
+        onKeyPress={(e) => {
+          if (e.nativeEvent.key === "Backspace" && value === SENTINEL && Platform.OS === "ios") {
+            // iOS sends Backspace on an "empty" field without a text change.
+          }
+        }}
+        onFocus={() => {
+          focused.current = true;
+          props.onFocusChange(true);
+          redraw();
+        }}
+        onBlur={() => {
+          focused.current = false;
+          props.onFocusChange(false);
+          redraw();
+        }}
+        selection={{ start: value.length, end: value.length }}
+        submitBehavior="submit"
+        autoCorrect={false}
+        autoCapitalize="none"
+        autoComplete="off"
+        spellCheck={false}
+        importantForAutofill="no"
+        keyboardType={Platform.OS === "android" ? "visible-password" : "ascii-capable"}
+        caretHidden
+        contextMenuHidden
+        style={styles.hiddenInput}
+      />
+    </View>
+  );
+});
+
+export function ctrlOf(s: string): string {
+  if (s.length !== 1) return s;
+  const c = s.charCodeAt(0);
+  if (c >= 0x61 && c <= 0x7a) return String.fromCharCode(c - 0x60);
+  if (c >= 0x41 && c <= 0x5a) return String.fromCharCode(c - 0x40);
+  switch (s) {
+    case " ": case "2": case "@": return "\x00";
+    case "[": case "3": return "\x1b";
+    case "\\": case "4": return "\x1c";
+    case "]": case "5": return "\x1d";
+    case "^": case "6": return "\x1e";
+    case "_": case "7": case "/": return "\x1f";
+    case "8": case "?": return "\x7f";
+    default: return s;
+  }
+}
+
+const styles = StyleSheet.create({
+  root: { flex: 1, overflow: "hidden" },
+  hiddenInput: { position: "absolute", left: -1000, top: 0, width: 10, height: 10, opacity: 0 },
+});
