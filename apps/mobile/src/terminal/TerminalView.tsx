@@ -234,7 +234,13 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         p.current.onTouchStart();
       })
       .onUpdate((e) => {
-        if (axis.current === "none") axis.current = Math.abs(e.translationY) >= Math.abs(e.translationX) ? "v" : "h";
+        if (axis.current === "none") {
+          // The first update can come before any movement; pick the axis once there is some.
+          const ax = Math.abs(e.translationX);
+          const ay = Math.abs(e.translationY);
+          if (Math.max(ax, ay) < 6) return;
+          axis.current = ay >= ax ? "v" : "h";
+        }
         const dy = e.translationY - lastY.current;
         lastY.current = e.translationY;
         if (axis.current !== "v") return;
