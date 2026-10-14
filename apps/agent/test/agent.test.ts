@@ -176,3 +176,28 @@ function pidOf(port: number): number {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+describe.skipIf(!sessionRunning)("corral-agent session limits", () => {
+  it("only shows and serves the allowed sessions", async () => {
+    const store = new DeviceStore(join(mkdtempSync(join(tmpdir(), "corral-agent-")), "devices.json"));
+    const agent = await startAgent({
+      listen: ["127.0.0.1"],
+      port: 0,
+      store,
+      host: agentHost("test-host", "0.0.0"),
+      identify: async () => peer,
+      sessions: [SESSION],
+    });
+    try {
+      const conn = await AgentConnection.open(`ws://127.0.0.1:${agent.ports[0]}`);
+      const r = await conn.call<PairResult>("pair", { code: store.createPairingCode().code, deviceName: "x" });
+      expect(r.host.name).toBe("test-host");
+      const sessions = await conn.call<{ name: string }[]>("sessions");
+      expect(sessions.map((s) => s.name)).toEqual([SESSION]);
+      await expect(conn.call("herdr.call", { session: "default", method: "ping" })).rejects.toMatchObject({ code: "bad_request" });
+      conn.close();
+    } finally {
+      await agent.close();
+    }
+  });
+});

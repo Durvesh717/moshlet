@@ -28,6 +28,8 @@ export interface AgentOptions {
   host: HostInfo;
   /** Who may even open a connection: the owner's Tailscale devices. Returns the peer, or null to refuse. */
   identify: (remoteIp: string) => Promise<Peer | null>;
+  /** Only these herdr sessions are visible to devices (all when unset). */
+  sessions?: string[];
   /** Grace before a vanished device's terminals are ended (it may just be reconnecting). */
   releaseGraceMs?: number;
   log?: (msg: string) => void;
@@ -76,7 +78,8 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
   let sessionCache: { at: number; list: HerdrSession[] } | null = null;
   const sessions = async (fresh = false): Promise<HerdrSession[]> => {
     if (!fresh && sessionCache && Date.now() - sessionCache.at < 5000) return sessionCache.list;
-    sessionCache = { at: Date.now(), list: await listSessions() };
+    const all = await listSessions();
+    sessionCache = { at: Date.now(), list: opts.sessions ? all.filter((s) => opts.sessions!.includes(s.name)) : all };
     return sessionCache.list;
   };
   const socketOf = async (name: string): Promise<string> => {

@@ -12,3 +12,7 @@ apps/mobile/ios/
 *.ipa
 *.jks
 *.keystore
+
+# native build output
+**/android/build/
+**/android/.cxx/

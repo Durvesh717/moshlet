@@ -76,7 +76,8 @@ export class Renderer {
     this.mainBold = Skia.Font(this.fonts.bold, size);
     this.sym = Skia.Font(this.fonts.symRegular, size);
     this.symBold = Skia.Font(this.fonts.symBold, size);
-    for (const f of [this.main, this.mainBold, this.sym, this.symBold]) f.setSubpixel(true);
+    // react-native-skia's native setSubpixel reads a number despite its boolean type.
+    for (const f of [this.main, this.mainBold, this.sym, this.symBold]) f.setSubpixel(1 as unknown as boolean);
     this.cellW = this.main.measureText("M").width;
     const m = this.main.getMetrics();
     const glyphH = m.descent - m.ascent;

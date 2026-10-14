@@ -14,7 +14,9 @@ const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.
 
 const USAGE = `corral-agent ${VERSION}: lets Corral on your phone reach herdr on this computer, over Tailscale.
 
-  corral-agent serve [--port N]   run the service (listens on this machine's Tailscale addresses only)
+  corral-agent serve [--port N] [--sessions a,b]
+                                  run the service (listens on this machine's Tailscale addresses only);
+                                  --sessions limits which herdr sessions devices can see
   corral-agent pair               show a one-time code to pair a phone or tablet
   corral-agent devices            list paired devices
   corral-agent revoke <id>        unpair a device
@@ -27,6 +29,8 @@ const log = (msg: string) => console.log(`${new Date().toTimeString().slice(0, 8
 async function serve(args: string[]): Promise<void> {
   const portArg = args.indexOf("--port");
   const port = portArg >= 0 ? Number(args[portArg + 1]) : Number(process.env.CORRAL_AGENT_PORT ?? AGENT_PORT);
+  const sessionsArg = args.indexOf("--sessions");
+  const sessionList = (sessionsArg >= 0 ? args[sessionsArg + 1] : process.env.CORRAL_AGENT_SESSIONS)?.split(",").map((s) => s.trim()).filter(Boolean);
   const self = await tailscaleSelf();
   const store = new DeviceStore();
   const host = agentHost(self.hostName || hostname(), VERSION);
@@ -36,6 +40,7 @@ async function serve(args: string[]): Promise<void> {
     store,
     host,
     log,
+    ...(sessionList?.length ? { sessions: sessionList } : {}),
     // Only devices signed in to the same Tailscale account as this machine may connect at all.
     identify: async (ip) => {
       const peer = await whois(ip);
