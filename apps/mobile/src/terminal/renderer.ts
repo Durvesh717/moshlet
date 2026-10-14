@@ -8,6 +8,7 @@ import {
   type SkTypeface,
   type SkTypefaceFontProvider,
 } from "@shopify/react-native-skia";
+import { Platform } from "react-native";
 import { drawBox, isBoxChar } from "./boxDrawing";
 import { CURSOR, DEFAULT_BG, DEFAULT_FG, resolveColor } from "./palette";
 
@@ -32,7 +33,14 @@ export interface Frame {
   focused: boolean;
 }
 
-const VS16 = "️";
+const VS16 = "\ufe0f";
+const TEXT_FAMILIES = ["JetBrains Mono", "Adwaita Mono"];
+/**
+ * The system colour emoji. iOS names its family; Android's is reachable only through fallback,
+ * which the emoji script locale steers to it.
+ */
+const EMOJI_STYLE =
+  Platform.OS === "ios" ? { fontFamilies: ["Apple Color Emoji"] } : { fontFamilies: [] as string[], locale: "und-Zsye" };
 const GLYPH_MAIN = 0;
 const GLYPH_SYM = 1;
 const GLYPH_PARAGRAPH = 2;
@@ -248,7 +256,8 @@ export class Renderer {
       builder.pushStyle({
         color: this.color(fg),
         fontSize: this.fontSize,
-        fontFamilies: ["JetBrains Mono", "Adwaita Mono"],
+        // The bundled fonts have text forms of many emoji (⚠ ℹ), but VS16 asks for the colour form.
+        ...(text.includes(VS16) ? EMOJI_STYLE : { fontFamilies: TEXT_FAMILIES }),
         fontStyle: { weight: has(style, Attr.BOLD) ? 700 : 400 },
       });
       builder.addText(text);
