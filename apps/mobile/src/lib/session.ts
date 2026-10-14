@@ -112,6 +112,8 @@ export class HostSession {
       ? get().session
       : (sessions.find((s) => s.default)?.name ?? sessions[0]?.name ?? "default");
     set({ sessions, session, conn: { kind: "online" } });
+    // The saved session may be gone (or not offered); remember the one actually in use.
+    if (session !== this.host.session) this.persist({ session });
     await this.refresh();
     if (!this.pollTimer) this.pollTimer = setInterval(() => this.refreshSoon(), SNAPSHOT_EVERY_MS);
     // First connect: open the last pane. Reconnect: the mosh session may still be fine; health checks reattach if not.
