@@ -1,7 +1,7 @@
 import { KeyField, type Cell, type MoshClient, type Screen } from "@corral/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
+import { Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { TERMINAL_FONTS } from "../theme";
@@ -215,8 +215,16 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   const axis = useRef<"none" | "v" | "h">("none");
   const lastY = useRef(0);
   const pinchStart = useRef(props.fontSize);
-  // Declared before the gestures: their callbacks capture it when they are built.
+  // Declared before the gestures: their callbacks capture these when they are built.
   const input = useRef<TextInput>(null);
+  const showKeyboard = () => {
+    const field = input.current;
+    if (!field) return;
+    // Android keeps the field focused when Back hides the keyboard, and focusing a focused field
+    // does nothing, so take focus away first to bring the keyboard back.
+    if (field.isFocused() && !Keyboard.isVisible()) field.blur();
+    field.focus();
+  };
 
   const gesture = useMemo(() => {
     const pan = Gesture.Pan()
@@ -257,7 +265,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       });
     const tap = Gesture.Tap()
       .runOnJS(true)
-      .onEnd(() => input.current?.focus());
+      .onEnd(() => showKeyboard());
     const longPress = Gesture.LongPress()
       .runOnJS(true)
       .minDuration(450)
@@ -321,7 +329,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   };
 
   useImperativeHandle(ref, () => ({
-    focus: () => input.current?.focus(),
+    focus: showKeyboard,
     blur: () => input.current?.blur(),
     wheelToBottom: () => {
       stopFling();
