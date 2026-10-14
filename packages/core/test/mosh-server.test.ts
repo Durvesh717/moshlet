@@ -71,6 +71,27 @@ describe.skipIf(!haveMosh)("MoshClient against mosh-server", () => {
     expect(await ended).toBe("session-ended");
   });
 
+  it("keeps the session across a network change (hop to a fresh socket)", async () => {
+    const { port, key } = await startServer("/usr/bin/env", "PS1=$ ", "/bin/sh");
+    const client = new MoshClient({ host: "127.0.0.1", port, key, cols: 60, rows: 20, transport: nodeUdp });
+    await until(client, "prompt", (s) => s.text().includes("$"));
+    client.networkChanged();
+    client.write(utf8Encode("echo roamed$((1+1))\r"));
+    await until(client, "output after the hop", (s) => s.text().includes("roamed2"));
+    await client.close();
+  });
+
+  it("reassembles large multi-fragment screens", async () => {
+    const { port, key } = await startServer("/usr/bin/env", "PS1=$ ", "/bin/sh");
+    const client = new MoshClient({ host: "127.0.0.1", port, key, cols: 200, rows: 60, transport: nodeUdp });
+    await until(client, "prompt", (s) => s.text().includes("$"));
+    // A full screen of distinct, colored rows compresses poorly: several fragments per instruction.
+    client.write(utf8Encode("for i in $(seq 1 300); do printf '\\033[3%dm%s %04d\\033[0m\\n' $((i%7+1)) $(head -c 60 /dev/urandom | base64 -w0) $i; done; echo done-$((6*7))\r"));
+    const s = await until(client, "big output", (sc) => sc.text().includes("done-42"), 15_000);
+    expect(s.text()).toMatch(/ 0300/);
+    await client.close();
+  });
+
   it("closing from the client stops the server", async () => {
     const { port, key } = await startServer("/usr/bin/env", "PS1=$ ", "/bin/sh");
     const client = new MoshClient({ host: "127.0.0.1", port, key, cols: 40, rows: 10, transport: nodeUdp });
