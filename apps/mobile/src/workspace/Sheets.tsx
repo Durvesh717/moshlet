@@ -3,13 +3,14 @@ import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomShe
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2 } from "lucide-react-native";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { C, F, R } from "../theme";
 import { confirm } from "../ui/Confirm";
 import { StatusGlyph } from "../ui/kit";
 
 const backdrop = (p: BottomSheetBackdropProps) => <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.6} />;
 
-const sheetProps = {
+const baseSheetProps = {
   backdropComponent: backdrop,
   backgroundStyle: { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
   handleIndicatorStyle: { backgroundColor: C.line2, width: 44 },
@@ -18,11 +19,18 @@ const sheetProps = {
   keyboardBlurBehavior: "restore" as const,
 };
 
+/** Sheets stop below the status bar when they grow (to their content, or above the keyboard). */
+function useSheetProps() {
+  const insets = useSafeAreaInsets();
+  return { ...baseSheetProps, topInset: insets.top };
+}
+
 /** The agent's approval dialog, read off its screen, as big buttons; plus a reply box. */
 export const ApprovalSheet = forwardRef<
   BottomSheetModal,
   { agentName: string; where: string; read(): Promise<string>; onChoose(keys: string[]): void; onReply(text: string): void }
 >(function ApprovalSheet(props, ref) {
+  const sheetProps = useSheetProps();
   const [prompt, setPrompt] = useState<ApprovalPrompt | null>(null);
   const [reply, setReply] = useState("");
   const { read } = props;
@@ -116,6 +124,7 @@ export const PaneMapSheet = forwardRef<
     onRename(): void;
   }
 >(function PaneMapSheet(props, ref) {
+  const sheetProps = useSheetProps();
   const layout: Layout | undefined = props.snapshot?.layouts.find((l) => l.tab_id === props.tabId);
   const panes: Pane[] = props.snapshot?.panes.filter((p) => p.tab_id === props.tabId) ?? [];
   const [width, setWidth] = useState(0);
@@ -210,6 +219,7 @@ export function useTextPrompt() {
 }
 
 export function TextPromptSheet(props: { state: { title: string; initial: string } | null; done(v: string | null): void }) {
+  const sheetProps = useSheetProps();
   const [value, setValue] = useState("");
   const sheet = useRef<BottomSheetModal>(null);
   useEffect(() => {
