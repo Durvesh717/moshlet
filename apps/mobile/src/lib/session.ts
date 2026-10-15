@@ -29,6 +29,9 @@ const SCROLLBACK_LINES = 3000;
 /** Wheel-down, to put a pane we scrolled back at its bottom before leaving it (herdr keeps the position). */
 const WHEEL_DOWN = "\x1b[<65;1;1M";
 
+/** A snapshot minus panes' scroll positions, which change with every wheel step and aren't shown. */
+const snapshotKey = (s: Snapshot | null) => JSON.stringify(s, (k, v) => (k === "offset_from_bottom" ? undefined : v));
+
 const set = useApp.setState;
 const get = useApp.getState;
 
@@ -169,7 +172,8 @@ export class HostSession {
     try {
       const before = get().snapshot;
       const snapshot = await this.herdr().snapshot();
-      set({ snapshot });
+      // Polls mostly return what we already have; replacing it would redraw every screen that reads it.
+      if (snapshotKey(before) !== snapshotKey(snapshot)) set({ snapshot });
       this.followClosedPane(before, snapshot);
       await this.ensureWatch(snapshot.panes.map((p) => p.pane_id));
     } catch {
