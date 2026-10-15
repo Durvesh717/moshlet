@@ -11,6 +11,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
 import { C, F, R } from "../theme";
+import { confirm } from "../ui/Confirm";
 import { Chip, StatusGlyph } from "../ui/kit";
 import { Composer, KeyBar } from "../workspace/KeyBar";
 import { ApprovalSheet, PaneMapSheet, TextPromptSheet, useTextPrompt } from "../workspace/Sheets";
@@ -228,6 +229,18 @@ export default function WorkspaceScreen() {
           )}
           <Overlay
             conn={conn}
+            onFix={() => {
+              if (conn.kind !== "failed") return;
+              if (conn.fix === "setup") router.push({ pathname: "/add", params: { host: session.host.id } });
+              else if (conn.fix === "trust") {
+                void confirm({
+                  title: "Trust the new key?",
+                  message: `Only if you know why ${session.host.name}'s SSH key changed (a reinstall, or a new SSH server). Otherwise something else may be answering at its address.`,
+                  action: "Trust it",
+                  danger: true,
+                }).then((ok) => ok && void session.reconnect(true));
+              } else void session.reconnect();
+            }}
             attaching={s.attaching}
             error={s.attachError}
             noPane={!pane && !!snap}
@@ -320,6 +333,7 @@ function Overlay(props: {
   neverHeard: boolean;
   onRetry(): void;
   onPick(): void;
+  onFix(): void;
 }) {
   let message: string | null = null;
   if (props.conn.kind === "failed") message = props.conn.reason;
@@ -340,6 +354,11 @@ function Overlay(props: {
   return (
     <View style={[styles.overlay, styles.overlayDim]}>
       <Text style={styles.overlayText}>{message}</Text>
+      {props.conn.kind === "failed" && (
+        <View style={styles.overlayActions}>
+          <Chip label={FIX_LABEL[props.conn.fix]} onPress={props.onFix} />
+        </View>
+      )}
       {props.conn.kind === "online" && (
         <View style={styles.overlayActions}>
           {!props.noPane && <Chip label="Reattach" onPress={props.onRetry} />}
@@ -349,6 +368,8 @@ function Overlay(props: {
     </View>
   );
 }
+
+const FIX_LABEL = { unlock: "Unlock", trust: "Trust the new key…", setup: "Set up again", retry: "Try again" } as const;
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ground },

@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { deleteToken, saveHosts, type Host } from "../lib/hosts";
+import { hostLabel, saveHosts, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
 import { toast, useApp } from "../lib/store";
 import { unlock } from "../lib/unlock";
@@ -29,7 +29,7 @@ export default function Hosts() {
   const forget = async (host: Host) => {
     const ok = await confirm({
       title: `Forget ${host.name}?`,
-      message: "This device will need a new pairing code to connect again.",
+      message: `Corral removes it from this device. To also revoke this device's key, delete the line ending in "corral@" from the authorized keys of ${host.user} on ${host.name}.`,
       action: "Forget",
       danger: true,
     });
@@ -37,7 +37,6 @@ export default function Hosts() {
     const list = useApp.getState().hosts.filter((h) => h.id !== host.id);
     useApp.setState({ hosts: list });
     await saveHosts(list);
-    await deleteToken(host.id);
     toast(`Forgot ${host.name}`);
   };
 
@@ -58,7 +57,7 @@ export default function Hosts() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No computers yet</Text>
           <Text style={styles.emptyBody}>
-            Install corral-agent on the computer running herdr, run <Text style={styles.code}>corral-agent pair</Text>, then add it here with the code it shows.
+            Corral signs in to the computer running herdr over SSH and streams its panes over mosh. Nothing to install there: setup takes five short steps.
           </Text>
         </View>
       ) : (
@@ -70,7 +69,7 @@ export default function Hosts() {
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={styles.cardTitle}>{h.name}</Text>
               <Text style={styles.cardSub} numberOfLines={1}>
-                {h.address} · {h.session}
+                {hostLabel(h)} · {h.session}
               </Text>
             </View>
             <ChevronRight size={20} color={C.faint} />
@@ -78,7 +77,7 @@ export default function Hosts() {
         ))
       )}
 
-      <Pressable onPress={() => router.push("/pair")} style={({ pressed }) => [styles.add, pressed && { opacity: 0.8 }]}>
+      <Pressable onPress={() => router.push("/add")} style={({ pressed }) => [styles.add, pressed && { opacity: 0.8 }]}>
         <Plus size={20} color={C.text} />
         <Text style={styles.addText}>Add a computer</Text>
       </Pressable>

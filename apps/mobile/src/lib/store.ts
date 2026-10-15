@@ -7,7 +7,8 @@ export type ConnState =
   | { kind: "connecting" }
   | { kind: "online" }
   | { kind: "reconnecting"; reason: string }
-  | { kind: "failed"; reason: string; unpaired?: boolean };
+  /** `fix`: what the button offers: unlock the key, trust a changed host key, set the computer up again, or retry. */
+  | { kind: "failed"; reason: string; fix: "unlock" | "trust" | "setup" | "retry" };
 
 /** What the UI shows about the mosh link: coarse, so it changes rarely. */
 export interface LinkUi {

@@ -1,7 +1,7 @@
 import {
-  AgentConnection,
-  AgentError,
   HerdrApi,
+  HostLink,
+  ShellError,
   historyAbove,
   layoutScrollback,
   linkNeverHeard,
@@ -11,8 +11,6 @@ import {
   agentIn,
   primaryPane,
   tabsOf,
-  type AttachResult,
-  type HelloResult,
   type Link,
   type Snapshot,
   type SplitDirection,
@@ -20,11 +18,15 @@ import {
 import { AppState, type AppStateStatus } from "react-native";
 import * as Network from "expo-network";
 import { nativeUdp, setLowLatencyWifi } from "../../modules/corral-native";
-import { agentUrl, loadToken, saveHosts, type Host } from "./hosts";
+import type { SshConnection } from "../../modules/corral-native/ssh";
+import { saveHosts, type Host } from "./hosts";
+import { deviceIdentity, signIn, SignInError } from "./ssh";
 import { toast, useApp, type LinkUi } from "./store";
 
 const SNAPSHOT_EVERY_MS = 5000;
 const STALE_REATTACH_MS = 20_000;
+/** A quick command that proves the SSH link still works (after sleep, or a network change). */
+const PROBE_TIMEOUT_MS = 5000;
 const SCROLLBACK_LINES = 3000;
 /** Wheel-down, to put a pane we scrolled back at its bottom before leaving it (herdr keeps the position). */
 const WHEEL_DOWN = "\x1b[<65;1;1M";
@@ -36,12 +38,19 @@ const set = useApp.setState;
 const get = useApp.getState;
 
 /**
- * One computer: the agent connection (reconnecting with backoff), the herdr session's snapshot
- * and events, and the one attached terminal. Writes everything the UI needs into the store.
+ * One computer: the SSH connection (reconnecting with backoff), the herdr session's snapshot and
+ * events, and the one attached terminal. Writes everything the UI needs into the store. The
+ * terminal runs over mosh, so it keeps going while SSH reconnects.
  */
 export class HostSession {
   readonly host: Host;
-  private conn: AgentConnection | null = null;
+  private conn: SshConnection | null = null;
+  private link: HostLink | null = null;
+  /** Marks this device's mosh-servers on the computer (from its key's fingerprint). */
+  private tag = "";
+  private firstConnect = true;
+  private connecting = false;
+  private watch: { close(): void } | null = null;
   private closed = false;
   private attempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,7 +61,7 @@ export class HostSession {
   private watchKey = "";
   private grid: [number, number] = [0, 0];
   private attachSeq = 0;
-  private terminalPort = 0;
+  private terminalPid = 0;
   private offLink: (() => void) | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private lastAutoReattach = 0;
@@ -74,56 +83,106 @@ export class HostSession {
   // ---------------------------------------------------------------- connection
 
   private async connect(): Promise<void> {
-    if (this.closed) return;
-    const token = await loadToken(this.host.id);
-    if (!token) {
-      set({ conn: { kind: "failed", reason: "This device isn't paired with that computer anymore.", unpaired: true } });
-      return;
-    }
-    let conn: AgentConnection;
+    if (this.closed || this.connecting) return;
+    this.connecting = true;
     try {
-      conn = await AgentConnection.open(agentUrl(this.host));
-    } catch (e) {
-      return this.retry((e as Error).message);
+      await this.connectOnce();
+    } finally {
+      this.connecting = false;
     }
-    if (this.closed) return conn.close();
-    let hello: HelloResult;
+  }
+
+  private async connectOnce(): Promise<void> {
+    let conn: SshConnection;
     try {
-      hello = await conn.call<HelloResult>("hello", { deviceId: this.host.deviceId, token });
-    } catch (e) {
-      conn.close();
-      if (e instanceof AgentError && e.code === "unauthenticated") {
-        set({ conn: { kind: "failed", reason: e.message, unpaired: true } });
+      const identity = await deviceIdentity();
+      if (!identity) {
+        set({ conn: { kind: "failed", reason: "This device's key is locked.", fix: "unlock" } });
         return;
       }
-      return this.retry((e as Error).message);
+      this.tag = identity.fingerprint.replace(/^SHA256:/, "");
+      conn = await signIn(this.host);
+    } catch (e) {
+      if (e instanceof SignInError && e.problem === "network") return this.retry(e.message);
+      const fix = e instanceof SignInError ? ({ locked: "unlock", host_key: "trust", rejected: "setup", network: "retry" } as const)[e.problem] : "retry";
+      set({ conn: { kind: "failed", reason: (e as Error).message, fix } });
+      return;
     }
+    if (this.closed) return conn.close();
+    const link = new HostLink(conn);
+    let sessions;
+    try {
+      // A fresh start has no terminals yet, so any of this device's mosh-servers are leftovers from a killed app.
+      if (this.firstConnect) await link.endMoshSessions(this.tag).catch(() => 0);
+      sessions = await link.sessions();
+    } catch (e) {
+      conn.close();
+      set({ conn: { kind: "failed", reason: (e as Error).message, fix: "retry" } });
+      return;
+    }
+    this.firstConnect = false;
     this.conn = conn;
+    this.link = link;
     this.attempt = 0;
-    conn.onClose((reason) => {
+    const onLost = (reason: string) => {
       if (this.conn !== conn) return;
-      this.conn = null;
-      this.watchKey = "";
+      this.dropLink();
       this.retry(reason);
-    });
-    conn.onPush((p) => {
-      if (p.event === "herdr") this.refreshSoon();
-      else if (p.event === "herdr.watchEnded") {
-        this.watchKey = "";
-        setTimeout(() => this.refreshSoon(), 2000);
-      }
-    });
-    const sessions = hello.sessions;
+    };
+    conn.onClose(onLost);
+    if (conn.closed) return onLost(conn.closed);
     const session = sessions.some((s) => s.name === get().session && s.running)
       ? get().session
       : (sessions.find((s) => s.default)?.name ?? sessions[0]?.name ?? "default");
     set({ sessions, session, conn: { kind: "online" } });
-    // The saved session may be gone (or not offered); remember the one actually in use.
+    // The saved session may be gone; remember the one actually in use.
     if (session !== this.host.session) this.persist({ session });
     await this.refresh();
     if (!this.pollTimer) this.pollTimer = setInterval(() => this.refreshSoon(), SNAPSHOT_EVERY_MS);
     // First connect: open the last pane. Reconnect: the mosh session may still be fine; health checks reattach if not.
     if (!get().paneId) this.openPane(this.initialPane());
+  }
+
+  private dropLink(): void {
+    this.watch?.close();
+    this.watch = null;
+    this.watchKey = "";
+    this.conn = null;
+    this.link = null;
+  }
+
+  /** The fix button on a failed connection: unlock, trust a changed host key, or simply try again. */
+  async reconnect(trustNewHostKey = false): Promise<void> {
+    if (this.closed) return;
+    if (trustNewHostKey) this.persist({ hostKey: "", keyType: "" });
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.attempt = 0;
+    set({ conn: { kind: "connecting" } });
+    await this.connect();
+    // Trusting again: remember the key it presented this time.
+    if (trustNewHostKey && this.conn) this.persist({ hostKey: this.conn.hostKey, keyType: this.conn.keyType });
+  }
+
+  /** A command that timed out may mean a dead link that SSH hasn't noticed yet. */
+  private callFailed(e: unknown): void {
+    if (e instanceof ShellError && e.code === "timeout") void this.probe();
+  }
+
+  /** Checks the SSH link with a quick command; a link that doesn't answer is replaced. */
+  private async probe(): Promise<void> {
+    const conn = this.conn;
+    if (!conn) return;
+    try {
+      await conn.exec("true", { timeoutMs: PROBE_TIMEOUT_MS });
+    } catch {
+      if (this.conn !== conn) return;
+      conn.close();
+      this.dropLink();
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+      this.attempt = 0;
+      set({ conn: { kind: "reconnecting", reason: "the connection stopped answering" } });
+      void this.connect();
+    }
   }
 
   private retry(reason: string): void {
@@ -136,8 +195,17 @@ export class HostSession {
   }
 
   private herdr(): HerdrApi {
-    if (!this.conn) throw new Error(`Not connected to ${this.host.name}`);
-    return new HerdrApi(this.conn.herdr(get().session));
+    if (!this.link) throw new Error(`Not connected to ${this.host.name}`);
+    return new HerdrApi(this.link.herdr(get().session));
+  }
+
+  /** herdr's sessions, fresh (the session switcher shows whether each is running). */
+  async refreshSessions(): Promise<void> {
+    try {
+      if (this.link) set({ sessions: await this.link.sessions() });
+    } catch {
+      // Keep the list we have.
+    }
   }
 
   async close(): Promise<void> {
@@ -147,8 +215,9 @@ export class HostSession {
     for (const t of [this.pollTimer, this.healthTimer]) if (t) clearInterval(t);
     setLowLatencyWifi(false);
     await this.releaseTerminal();
-    this.conn?.close();
-    this.conn = null;
+    const conn = this.conn;
+    this.dropLink();
+    conn?.close();
     set({ activeHostId: null, conn: { kind: "idle" }, snapshot: null, paneId: null, terminal: null, link: null, scrollback: [], historyMode: false });
   }
 
@@ -176,8 +245,9 @@ export class HostSession {
       if (snapshotKey(before) !== snapshotKey(snapshot)) set({ snapshot });
       this.followClosedPane(before, snapshot);
       await this.ensureWatch(snapshot.panes.map((p) => p.pane_id));
-    } catch {
+    } catch (e) {
       // The reconnect loop handles a dead link; a failed poll isn't worth surfacing.
+      this.callFailed(e);
     } finally {
       this.refreshing = false;
       if (this.refreshAgain) {
@@ -205,12 +275,27 @@ export class HostSession {
   /** herdr's agent-status events are per pane, so re-subscribe when the set of panes changes. */
   private async ensureWatch(panes: string[]): Promise<void> {
     const key = `${get().session}|${[...panes].sort().join(",")}`;
-    if (!this.conn || key === this.watchKey) return;
+    const link = this.link;
+    if (!link || key === this.watchKey) return;
     this.watchKey = key;
+    this.watch?.close();
+    this.watch = null;
     try {
-      await this.conn.call("herdr.watch", { session: get().session, statusPanes: panes });
+      const w = await link.watch(
+        get().session,
+        panes,
+        () => this.refreshSoon(),
+        () => {
+          if (this.watch !== w) return;
+          this.watch = null;
+          this.watchKey = "";
+          setTimeout(() => this.refreshSoon(), 2000);
+        },
+      );
+      if (this.link !== link || this.watchKey !== key) w.close();
+      else this.watch = w;
     } catch {
-      this.watchKey = "";
+      if (this.watchKey === key) this.watchKey = "";
     }
   }
 
@@ -218,6 +303,8 @@ export class HostSession {
     if (name === get().session) return;
     void this.releaseTerminal();
     set({ session: name, snapshot: null, paneId: null });
+    this.watch?.close();
+    this.watch = null;
     this.watchKey = "";
     this.persist({ session: name });
     void this.refresh().then(() => this.openPane(this.initialPane()));
@@ -260,14 +347,19 @@ export class HostSession {
       return;
     }
     await this.releaseTerminal(false);
-    if (!this.conn || !this.foreground) return;
+    const conn = this.conn;
+    const link = this.link;
+    if (!conn || !link || !this.foreground) return;
     set({ attaching: true, attachError: null });
     const [cols, rows] = this.grid[0] > 0 ? this.grid : [60, 30];
     try {
-      const r = await this.conn.call<AttachResult>("terminal.attach", { session: get().session, terminalId: pane.terminal_id, cols, rows });
-      if (seq !== this.attachSeq) return;
-      const client = new MoshClient({ host: r.host, port: r.port, key: Sealer.decodeKey(r.key), cols, rows, transport: nativeUdp });
-      this.terminalPort = r.port;
+      const m = await link.startMosh(get().session, pane.terminal_id, this.tag);
+      if (seq !== this.attachSeq) {
+        void link.stopMosh(m.pid, this.tag).catch(() => {});
+        return;
+      }
+      const client = new MoshClient({ host: conn.address, port: m.port, key: Sealer.decodeKey(m.key), cols, rows, transport: nativeUdp });
+      this.terminalPid = m.pid;
       if (this.grid[0] > 0) client.resize(this.grid[0], this.grid[1]);
       this.offLink = client.onLink((l) => this.publishLink(l));
       set({ terminal: client });
@@ -285,7 +377,7 @@ export class HostSession {
 
   /**
    * Lets go of the terminal: scrolls it back to the bottom if we scrolled it, ends the mosh
-   * session and tells the agent, which ends the mosh-server so the pane gets its desktop size back.
+   * session, and makes sure its mosh-server is gone so the pane gets its desktop size back.
    */
   private async releaseTerminal(clear = true): Promise<void> {
     const client = get().terminal;
@@ -294,18 +386,17 @@ export class HostSession {
     if (clear) set({ terminal: null, link: null });
     else set({ terminal: null });
     if (!client) return;
-    const port = this.terminalPort;
+    const pid = this.terminalPid;
+    this.terminalPid = 0;
     if (this.remoteNotches > 0) {
       client.write(new TextEncoder().encode(WHEEL_DOWN.repeat(this.remoteNotches + 2)));
       this.remoteNotches = 0;
       await sleep(400);
     }
     void client.close(800);
-    try {
-      await this.conn?.call("terminal.release", { port });
-    } catch {
-      // The agent ends it anyway when we disconnect.
-    }
+    // It quits when the client says goodbye; in case that gets lost, end it from here too (it
+    // takes the first signal as a polite goodbye). Failing both, it times out on its own.
+    void this.link?.stopMosh(pid, this.tag).catch(() => {});
   }
 
   private publishLink(l: Link): void {
@@ -321,7 +412,7 @@ export class HostSession {
     if (!cur || JSON.stringify(cur) !== JSON.stringify(next)) set({ link: next });
   }
 
-  /** If the terminal went silent (mosh-server timed out, agent released it) while we're online, reattach. */
+  /** If the terminal went silent (mosh-server timed out or ended) while we're online, reattach. */
   private checkTerminalHealth(): void {
     const t = get().terminal;
     if (!t || !this.conn || !this.foreground) return;
@@ -343,7 +434,10 @@ export class HostSession {
 
   private networkChanged(): void {
     get().terminal?.networkChanged();
-    if (!this.conn && !this.closed) {
+    if (this.closed) return;
+    if (this.conn) {
+      void this.probe();
+    } else if (get().conn.kind !== "failed") {
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
       this.attempt = 0;
       void this.connect();
@@ -406,6 +500,7 @@ export class HostSession {
         await fn(this.herdr());
         this.refreshSoon();
       } catch (e) {
+        this.callFailed(e);
         toast(`${label}: ${(e as Error).message}`);
       }
     })();
