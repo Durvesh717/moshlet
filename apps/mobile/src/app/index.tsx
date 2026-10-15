@@ -1,14 +1,15 @@
 import { useRouter } from "expo-router";
-import { Check, ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
+import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScopedTheme, useUniwind } from "uniwind";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { setTheme, THEMES } from "../lib/appearance";
+import { setTheme, THEMES, type ThemeId } from "../lib/appearance";
 import { hostLabel, saveHosts, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
 import { toast, useApp } from "../lib/store";
@@ -117,31 +118,30 @@ export default function Hosts() {
 function ThemePicker() {
   const { theme } = useUniwind();
   return (
-    <View className="flex-row gap-2.5">
+    <RadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemeId)} className="gap-2.5">
       {THEMES.map((t) => {
         const selected = theme === t.id;
         return (
           <ScopedTheme key={t.id} theme={t.id}>
             <Pressable
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`${t.label} theme`}
               onPress={() => setTheme(t.id)}
-              className={cn("flex-1 gap-2.5 rounded-xl bg-background p-3 active:opacity-80", selected ? "border-2 border-brand" : "border border-border-strong")}
+              accessibilityLabel={`${t.label} theme`}
+              className={cn("flex-row items-center gap-3.5 rounded-xl border-2 bg-background p-3 active:opacity-80", selected ? "border-brand" : "border-border-strong")}
             >
-              <View className="h-9 flex-row items-end gap-1 rounded-md bg-terminal p-1.5">
-                <View className="h-2 flex-1 rounded-sm bg-primary" />
-                <View className="h-2 w-2 rounded-sm bg-success" />
-                <View className="h-2 w-2 rounded-sm bg-warning" />
+              <RadioGroupItem value={t.id} aria-label={t.label} className="size-5 border-border-strong" />
+              <View className="flex-1 gap-0.5">
+                <Text className="font-medium text-[15px]">{t.label}</Text>
+                <Text className="text-xs text-muted-foreground">{t.note}</Text>
               </View>
-              <View className="flex-row items-center justify-between">
-                <Text className="font-medium text-[13px]">{t.label}</Text>
-                {selected && <Icon as={Check} size={14} className="text-brand" />}
+              <View className="h-9 w-24 flex-row items-end gap-1 rounded-md bg-terminal p-1.5">
+                <View className="h-2 flex-1 rounded-sm bg-primary" />
+                <View className="size-2 rounded-sm bg-success" />
+                <View className="size-2 rounded-sm bg-warning" />
               </View>
             </Pressable>
           </ScopedTheme>
         );
       })}
-    </View>
+    </RadioGroup>
   );
 }

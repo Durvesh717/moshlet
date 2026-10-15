@@ -8,7 +8,7 @@ import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { useOverTerminal } from "../lib/overlay";
 import { useApp, type ConnState } from "../lib/store";
-import { Chip, IconButton, StatusGlyph } from "../ui/kit";
+import { IconButton, Pill, StatusGlyph } from "../ui/kit";
 
 export function shortCwd(path?: string): string {
   if (!path) return "";
@@ -92,7 +92,7 @@ export function TopBar(props: {
       </DropdownMenu>
       <LinkIndicator conn={props.conn} />
       <IconButton icon={History} label="History" size={36} active={props.historyMode} onPress={props.onHistory} />
-      <Chip label={`${props.paneIndex}/${props.paneCount}`} onPress={props.onPaneMap} height={36} tone="muted" icon={LayoutGrid} />
+      <Pill label={`${props.paneIndex}/${props.paneCount}`} onPress={props.onPaneMap} height={36} tone="muted" icon={LayoutGrid} />
     </View>
   );
 }

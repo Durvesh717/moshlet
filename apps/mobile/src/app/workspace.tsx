@@ -14,7 +14,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
 import { confirm } from "../ui/Confirm";
-import { Chip, StatusGlyph } from "../ui/kit";
+import { Pill, StatusGlyph } from "../ui/kit";
 import { Composer, KeyBar } from "../workspace/KeyBar";
 import { ApprovalSheet, PaneMapSheet, TextPromptSheet, useTextPrompt } from "../workspace/Sheets";
 import { Sidebar } from "../workspace/Sidebar";
@@ -208,7 +208,7 @@ export default function WorkspaceScreen() {
             onFocusChange={setTermFocused}
           />
           {agent?.agent_status === "blocked" && (
-            <Chip
+            <Pill
               label="Needs approval"
               onPress={() => approval.current?.present()}
               height={34}
@@ -218,7 +218,7 @@ export default function WorkspaceScreen() {
             />
           )}
           {(s.historyMode || scrolledUp) && (
-            <Chip
+            <Pill
               label="Live"
               onPress={() => (s.historyMode ? session.closeHistory() : term.current?.wheelToBottom())}
               height={34}
@@ -356,13 +356,13 @@ function Overlay(props: {
       <Text className="text-center text-[15px] leading-[22px]">{message}</Text>
       {props.conn.kind === "failed" && (
         <View className="flex-row gap-2.5">
-          <Chip label={FIX_LABEL[props.conn.fix]} onPress={props.onFix} />
+          <Pill label={FIX_LABEL[props.conn.fix]} onPress={props.onFix} />
         </View>
       )}
       {props.conn.kind === "online" && (
         <View className="flex-row gap-2.5">
-          {!props.noPane && <Chip label="Reattach" onPress={props.onRetry} />}
-          <Chip label="Pick a pane" onPress={props.onPick} />
+          {!props.noPane && <Pill label="Reattach" onPress={props.onRetry} />}
+          <Pill label="Pick a pane" onPress={props.onPick} />
         </View>
       )}
     </View>

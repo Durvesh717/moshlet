@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { ConnState } from "../lib/store";
-import { Chip, SectionLabel, StatusGlyph, statusLabel } from "../ui/kit";
+import { Pill, SectionLabel, StatusGlyph, statusLabel } from "../ui/kit";
 import { LinkIndicator, shortCwd } from "./TopBar";
 
 export function Sidebar(props: {
@@ -197,7 +197,7 @@ export function Sidebar(props: {
       <View className="flex-row items-center gap-2.5">
         <LinkIndicator conn={props.conn} />
         <View className="flex-1" />
-        <Chip label="Computers" onPress={props.onHosts} height={40} icon={Monitor} />
+        <Pill label="Computers" onPress={props.onHosts} height={40} icon={Monitor} />
       </View>
     </View>
   );

@@ -18,7 +18,7 @@ import { newHostId, saveHosts, type Host } from "../lib/hosts";
 import { closeHost, openHost } from "../lib/session";
 import { deviceIdentity } from "../lib/ssh";
 import { toast, useApp } from "../lib/store";
-import { Chip, IconButton } from "../ui/kit";
+import { Choices, IconButton } from "../ui/kit";
 
 type Step = "prepare" | "where" | "trust" | "signin" | "check";
 const STEPS: { id: Step; label: string }[] = [
@@ -240,11 +240,7 @@ export default function AddComputer() {
             <Body>
               Corral signs in to the computer running herdr over SSH, like a terminal would, and runs your panes over mosh. Nothing of Corral's is installed there. Once per computer:
             </Body>
-            <View className="flex-row flex-wrap gap-2">
-              {(Object.keys(OS_LABEL) as Os[]).map((o) => (
-                <Chip key={o} label={OS_LABEL[o]} selected={os === o} onPress={() => setOs(o)} height={34} />
-              ))}
-            </View>
+            <Choices<Os> value={os} onChange={setOs} height={34} options={(Object.keys(OS_LABEL) as Os[]).map((o) => ({ value: o, label: OS_LABEL[o] }))} />
             <Item n={1} title="Tailscale on both">
               <Small>Sign this device and the computer in to the same Tailscale account.</Small>
             </Item>
@@ -388,18 +384,15 @@ export default function AddComputer() {
             {ready && (
               <>
                 <Field label="herdr session">
-                  <View className="flex-row flex-wrap gap-2">
-                    {check.sessions.map((s) => (
-                      <Chip
-                        key={s.name}
-                        label={s.default && s.name !== "default" ? `${s.name} (default)` : s.name}
-                        selected={session === s.name}
-                        disabled={!s.running}
-                        onPress={() => setSession(s.name)}
-                        height={36}
-                      />
-                    ))}
-                  </View>
+                  <Choices
+                    value={session}
+                    onChange={setSession}
+                    options={check.sessions.map((s) => ({
+                      value: s.name,
+                      label: s.default && s.name !== "default" ? `${s.name} (default)` : s.name,
+                      disabled: !s.running,
+                    }))}
+                  />
                 </Field>
                 <Field label="Name in Corral">
                   <Input value={name} onChangeText={setName} autoCorrect={false} returnKeyType="done" className={cn(INPUT, "font-normal")} />
