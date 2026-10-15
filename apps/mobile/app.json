@@ -53,6 +53,14 @@
         {
           "faceIDPermission": "Corral uses Face ID to unlock your computers."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {

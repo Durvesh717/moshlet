@@ -50,3 +50,5 @@ A device can connect only if it is signed in to the same Tailscale account as th
 (`tailscale whois`), and then only with the token it got when pairing. The agent proxies herdr's
 API and starts `mosh-server` sessions for `herdr terminal attach --takeover`; the terminal itself
 flows over mosh (UDP 60000-61000 on the Tailscale address), end to end between app and server.
+The app talks to the agent over plain `ws://`: the agent only listens on the Tailscale address,
+where WireGuard already encrypts the traffic, so the Android app allows cleartext connections.
