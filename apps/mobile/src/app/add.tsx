@@ -376,7 +376,7 @@ export default function AddComputer() {
             <CheckRow
               ok={check.sessions.some((s) => s.running)}
               label="herdr running"
-              detail={check.sessions.some((s) => s.running) ? `${check.sessions.filter((s) => s.running).length} session(s)` : "no session running"}
+              detail={check.sessions.some((s) => s.running) ? `${check.sessions.filter((s) => s.running).length} running` : "no session running"}
             >
               {!!check.herdr && !check.sessions.some((s) => s.running) && <Text style={styles.itemBody}>Start herdr on the computer, then check again.</Text>}
             </CheckRow>
@@ -386,7 +386,7 @@ export default function AddComputer() {
                 <Field label="herdr session">
                   <View style={styles.sessionList}>
                     {check.sessions.map((s) => (
-                      <Chip key={s.name} label={s.default ? `${s.name} (default)` : s.name} selected={session === s.name} disabled={!s.running} onPress={() => setSession(s.name)} height={36} />
+                      <Chip key={s.name} label={s.default && s.name !== "default" ? `${s.name} (default)` : s.name} selected={session === s.name} disabled={!s.running} onPress={() => setSession(s.name)} height={36} />
                     ))}
                   </View>
                 </Field>
@@ -404,6 +404,8 @@ export default function AddComputer() {
           </>
         )}
       </ScrollView>
+      {/* Text scrolling up shouldn't run under the status bar. */}
+      <View pointerEvents="none" style={[styles.statusShade, { height: insets.top }]} />
     </KeyboardAvoidingView>
   );
 }
@@ -493,6 +495,7 @@ function Button(props: { label: string; onPress: () => void; busy?: boolean; sec
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ground },
+  statusShade: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: C.ground },
   content: { gap: 16 },
   header: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerTitle: { fontFamily: F.medium, fontSize: 15, color: C.muted },
