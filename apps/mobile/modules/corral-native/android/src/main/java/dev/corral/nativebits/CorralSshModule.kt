@@ -242,14 +242,17 @@ class CorralSshModule : Module() {
     client.connection.keepAlive.keepAliveInterval = 10
   }
 
+  /** Android wraps socket errors a few levels deep (ConnectException around "ECONNREFUSED"): look through all of them. */
   private fun networkError(e: Exception, host: String): CodedException {
-    val root = generateSequence<Throwable>(e) { it.cause }.last()
-    val message = when (root) {
-      is UnknownHostException -> "Couldn't find $host. Check the name, and that Tailscale is on."
-      is ConnectException -> "$host refused the connection. Is SSH turned on there?"
-      is SocketTimeoutException -> "$host didn't answer. Is it awake and on Tailscale?"
-      is NoRouteToHostException -> "No route to $host. Is Tailscale on?"
-      else -> root.message ?: root.javaClass.simpleName
+    val chain = generateSequence<Throwable>(e) { it.cause }.toList()
+    fun says(errno: String) = chain.any { it.message?.contains(errno) == true }
+    val message = when {
+      chain.any { it is UnknownHostException } -> "Couldn't find $host. Check the name, and that Tailscale is on."
+      says("ECONNREFUSED") -> "$host refused the connection. Is SSH turned on there, on that port?"
+      chain.any { it is NoRouteToHostException } || says("EHOSTUNREACH") || says("ENETUNREACH") -> "No route to $host. Is Tailscale on?"
+      chain.any { it is SocketTimeoutException } || says("ETIMEDOUT") -> "$host didn't answer. Is it awake and on Tailscale?"
+      chain.any { it is ConnectException } -> "Couldn't connect to $host. Is SSH turned on there?"
+      else -> chain.last().message ?: chain.last().javaClass.simpleName
     }
     return CodedException("ERR_NETWORK", message, e)
   }

@@ -33,6 +33,16 @@ const need = (): CorralSshModule => {
   return native;
 };
 
+/** Expo prefixes native errors with "Call to function 'CorralSsh.x' has been rejected. → Caused by:": keep the module's own message. */
+async function call<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    if (e instanceof Error) e.message = e.message.replace(/^Call to function '[^']*' has been rejected\.\s*(?:→\s*)?Caused by:\s*/, "");
+    throw e;
+  }
+}
+
 /** Errors from the native side carry a code: ERR_NEEDS_UNLOCK, ERR_HOST_KEY_CHANGED, ERR_NETWORK, ERR_TIMEOUT, ERR_CLOSED. */
 export const errorCode = (e: unknown): string | undefined => (e as { code?: string } | null)?.code;
 
@@ -40,7 +50,7 @@ export const errorCode = (e: unknown): string | undefined => (e as { code?: stri
 export const devicePublicKey = (): string | null => native?.publicKey() ?? null;
 
 /** Unlocks this device's SSH key (creating it the first time). Throws ERR_NEEDS_UNLOCK when a fingerprint/PIN check is due. */
-export const loadIdentity = (comment: string) => need().loadIdentity(comment);
+export const loadIdentity = (comment: string) => call(need().loadIdentity(comment));
 
 let streamSeq = 0;
 
@@ -66,15 +76,15 @@ export class SshConnection implements Shell {
 
   /** Connects (no login yet), checking the host key against the one seen before, when given. */
   static async open(host: string, port: number, known?: { hostKey: string; keyType: string }): Promise<SshConnection> {
-    return new SshConnection(await need().connect(host, port, known?.hostKey ?? null, known?.keyType ?? null));
+    return new SshConnection(await call(need().connect(host, port, known?.hostKey ?? null, known?.keyType ?? null)));
   }
 
   authKey(user: string): Promise<boolean> {
-    return need().authKey(this.id, user);
+    return call(need().authKey(this.id, user));
   }
 
   authPassword(user: string, password: string): Promise<boolean> {
-    return need().authPassword(this.id, user, password);
+    return call(need().authPassword(this.id, user, password));
   }
 
   get closed(): string | null {
@@ -84,7 +94,7 @@ export class SshConnection implements Shell {
   async exec(command: string, opts: { stdin?: string; timeoutMs?: number } = {}): Promise<ExecResult> {
     if (this.closedReason) throw new ShellError("closed", this.closedReason);
     try {
-      return await need().exec(this.id, command, opts.stdin ?? null, opts.timeoutMs ?? 15_000);
+      return await call(need().exec(this.id, command, opts.stdin ?? null, opts.timeoutMs ?? 15_000));
     } catch (e) {
       const code = errorCode(e);
       throw new ShellError(code === "ERR_TIMEOUT" ? "timeout" : code === "ERR_CLOSED" ? "closed" : "ssh", (e as Error).message);
@@ -114,7 +124,7 @@ export class SshConnection implements Shell {
       native?.closeStream(streamId);
     };
     try {
-      await need().stream(this.id, streamId, command, stdin);
+      await call(need().stream(this.id, streamId, command, stdin));
     } catch (e) {
       close();
       throw new ShellError("closed", (e as Error).message);
