@@ -1,4 +1,4 @@
-import { KeyField, type Cell, type MoshClient, type Screen } from "@corral/core";
+import { KeyField, rowsMoved, rowTexts, type Cell, type MoshClient, type Screen } from "@corral/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
@@ -46,6 +46,8 @@ function emptyPicture(): SkPicture {
   return rec.finishRecordingAsPicture();
 }
 const encoder = new TextEncoder();
+/** Rows asked for that no frame has brought by then aren't coming, even without an echo ack to say so. */
+const GIVE_UP_MS = 1000;
 
 export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function TerminalView(props, ref) {
   const p = useRef(props);
@@ -71,6 +73,34 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   const focused = useRef(false);
   const scrollPx = useRef(0);
   const frameQueued = useRef(false);
+  const live = useRef({ notches: 0, accum: 0, col: 1, row: 1 });
+  /**
+   * A live pane scrolls on the computer, a round trip away, so here the content moves with the
+   * finger first: rows asked for but not yet seen in a frame (`pendingRows`) and the drag not yet
+   * sent as a notch both offset the drawing, and each frame that brings rows takes them back.
+   * `rows` is the last frame's text, to tell how far the next one moved; `echoAt` the input count
+   * that, once the server echoes it, means every notch so far has been acted on; `edge` the
+   * direction the pane stopped moving in, where nothing more is predicted until the next touch.
+   */
+  const follow = useRef({ pendingRows: 0, settlePx: 0, rows: [] as string[], echoAt: 0, edge: 0, raf: 0, timer: null as ReturnType<typeof setTimeout> | null });
+
+  /** The drag not yet sent as a notch, as far as the pane can go that way. */
+  const shownDrag = (): number => {
+    const a = live.current.accum;
+    const f = follow.current;
+    if (a < 0 && live.current.notches === 0 && f.pendingRows <= 0) return 0; // at the bottom
+    if (f.edge !== 0 && Math.sign(a) === f.edge) return 0; // at the top of the history
+    return a;
+  };
+
+  /** How far below its last frame the live screen is drawn (negative: above). */
+  const liveOffset = (): number => {
+    const s = screen.current;
+    if (!renderer || !s || s.mouseMode === 0) return 0;
+    const f = follow.current;
+    const cap = size.current.height / 2;
+    return Math.min(Math.max(shownDrag() + f.pendingRows * renderer.cellH + f.settlePx, -cap), cap);
+  };
 
   const redrawNow = useCallback(() => {
     frameQueued.current = false;
@@ -80,11 +110,13 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     picture.value = renderer.render({
       screen: s,
       history: p.current.historyMode ? p.current.history : [],
-      scrollPx: p.current.historyMode ? scrollPx.current : 0,
+      scrollPx: p.current.historyMode ? scrollPx.current : liveOffset(),
       width,
       height,
       focused: focused.current,
     });
+    // liveOffset reads only refs and the renderer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, picture]);
 
   const redraw = useCallback(() => {
@@ -109,20 +141,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     redraw();
   }, [renderer, props.fontSize, updateGrid, redraw]);
 
-  // ---- frames straight from the mosh client (no React state per frame)
-  useEffect(() => {
-    const c = props.client;
-    if (!c) return;
-    screen.current = c.screen;
-    redraw();
-    return c.onScreen((s) => {
-      screen.current = s;
-      redraw();
-    });
-  }, [props.client, redraw]);
-
   // ---- scrolling: live (wheel events to the pane) and local (History mode)
-  const live = useRef({ notches: 0, accum: 0, col: 1, row: 1 });
   const fling = useRef<{ raf: number; local: boolean } | null>(null);
 
   const setScroll = useCallback(
@@ -143,33 +162,153 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     p.current.onRemoteScroll(n);
   };
 
-  const sendWheel = useCallback((up: boolean) => {
+  const sendWheel = useCallback((up: boolean): boolean => {
     const s = screen.current;
-    if (!s || s.mouseMode === 0) return;
-    if (!up && live.current.notches === 0 && fling.current) return;
+    if (!s || s.mouseMode === 0) return false;
+    if (!up && live.current.notches === 0 && fling.current) return false;
     setNotches(up ? live.current.notches + 1 : Math.max(0, live.current.notches - 1));
     const button = up ? 64 : 65;
     const { col, row } = live.current;
     const seq = s.mouseEncoding === 1006 ? `\x1b[<${button};${col};${row}M` : `\x1b[M${String.fromCharCode(32 + button, 32 + col, 32 + row)}`;
     p.current.onInput(encoder.encode(seq));
+    return true;
   }, []);
 
-  /** Turns finger travel into wheel notches, rowsPerNotch rows each, so the content keeps pace with the finger. */
+  /** Eases settlePx (a correction to the predicted position) away. */
+  const settle = useCallback(() => {
+    const f = follow.current;
+    if (f.raf) return;
+    let last = performance.now();
+    const step = () => {
+      const now = performance.now();
+      f.settlePx *= Math.exp(-(now - last) / 70);
+      last = now;
+      if (Math.abs(f.settlePx) < 0.5) f.settlePx = 0;
+      f.raf = f.settlePx === 0 ? 0 : requestAnimationFrame(step);
+      redraw();
+    };
+    f.raf = requestAnimationFrame(step);
+  }, [redraw]);
+
+  /** Rows asked for aren't coming (the pane is at the top of its history): ease them back. */
+  const giveUp = useCallback(() => {
+    const f = follow.current;
+    if (f.timer) clearTimeout(f.timer);
+    f.timer = null;
+    if (f.pendingRows === 0) return;
+    f.edge = Math.sign(f.pendingRows);
+    f.settlePx += f.pendingRows * (renderer?.cellH ?? 1);
+    f.pendingRows = 0;
+    settle();
+  }, [renderer, settle]);
+
+  const awaitRows = useCallback(() => {
+    const f = follow.current;
+    if (f.timer) clearTimeout(f.timer);
+    f.timer = setTimeout(giveUp, GIVE_UP_MS);
+  }, [giveUp]);
+
+  /** Sends a wheel notch and predicts its rows, unless the pane can't move that way. True when predicted. */
+  const notch = useCallback(
+    (up: boolean): boolean => {
+      const wasAtBottom = live.current.notches === 0;
+      if (!sendWheel(up)) return false;
+      const dir = up ? 1 : -1;
+      const f = follow.current;
+      if ((!up && wasAtBottom) || f.edge === dir) return false;
+      f.edge = 0;
+      if (f.pendingRows === 0) {
+        f.rows = rowTexts(screen.current!);
+        awaitRows();
+      }
+      f.pendingRows += dir * p.current.rowsPerNotch;
+      f.echoAt = p.current.client?.inputEvents ?? 0;
+      return true;
+    },
+    [sendWheel, awaitRows],
+  );
+
+  /** A frame came in: rows it moved by were drawn ahead already, so take them back. */
+  const followFrame = useCallback(
+    (s: Screen) => {
+      const f = follow.current;
+      if (f.pendingRows === 0) return;
+      const next = rowTexts(s);
+      const n = p.current.rowsPerNotch;
+      const k = rowsMoved(f.rows, next, Math.min(0, f.pendingRows) - n, Math.max(0, f.pendingRows) + n, f.pendingRows);
+      f.rows = next;
+      if (k !== 0) {
+        // Further than asked means other output moved it too: that part is real, not ours to undo.
+        const left = f.pendingRows - k;
+        f.pendingRows = Math.sign(left) === Math.sign(f.pendingRows) ? left : 0;
+      }
+      // The server has acted on every notch and this is the screen after: what didn't come won't.
+      if (f.pendingRows !== 0 && (p.current.client?.echoedInputs ?? 0) >= f.echoAt) giveUp();
+      else if (f.pendingRows !== 0) {
+        if (k !== 0) awaitRows();
+      } else if (f.timer) {
+        clearTimeout(f.timer);
+        f.timer = null;
+      }
+    },
+    [awaitRows, giveUp],
+  );
+
+  /** Typing, another pane or History mode: the screen goes wherever the computer puts it. */
+  const resetFollow = useCallback(() => {
+    const f = follow.current;
+    if (f.timer) clearTimeout(f.timer);
+    if (f.raf) cancelAnimationFrame(f.raf);
+    follow.current = { pendingRows: 0, settlePx: 0, rows: [], echoAt: 0, edge: 0, raf: 0, timer: null };
+    live.current.accum = 0;
+  }, []);
+
+  /** Turns finger travel into wheel notches, rowsPerNotch rows each; the drawing follows the finger in between. */
   const wheel = useCallback(
     (dy: number) => {
       const step = (renderer?.cellH ?? 20) * p.current.rowsPerNotch;
       live.current.accum += dy;
       while (live.current.accum >= step) {
-        sendWheel(true);
+        notch(true);
         live.current.accum -= step;
       }
       while (live.current.accum <= -step) {
-        sendWheel(false);
+        notch(false);
         live.current.accum += step;
       }
+      redraw();
     },
-    [renderer, sendWheel],
+    [renderer, notch, redraw],
   );
+
+  /** A drag or fling that stops between notches finishes on the nearer one, easing the difference. */
+  const landDrag = useCallback(() => {
+    const l = live.current;
+    const f = follow.current;
+    const s = screen.current;
+    let shown = shownDrag();
+    l.accum = 0;
+    if (!renderer || !s || s.mouseMode === 0 || shown === 0) return;
+    const step = renderer.cellH * p.current.rowsPerNotch;
+    if (Math.abs(shown) >= step / 2 && notch(shown > 0)) shown -= Math.sign(shown) * step;
+    f.settlePx += shown;
+    settle();
+  }, [renderer, notch, settle]);
+
+  // ---- frames straight from the mosh client (no React state per frame)
+  useEffect(() => {
+    const c = props.client;
+    if (!c) return;
+    screen.current = c.screen;
+    redraw();
+    return c.onScreen((s) => {
+      screen.current = s;
+      followFrame(s);
+      redraw();
+    });
+  }, [props.client, redraw, followFrame]);
+
+  useEffect(() => resetFollow, [resetFollow]);
 
   const stopFling = () => {
     if (fling.current) cancelAnimationFrame(fling.current.raf);
@@ -187,6 +326,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       v *= Math.exp(-dt / 0.35);
       if (Math.abs(v) < 60) {
         fling.current = null;
+        if (!local) landDrag();
         return;
       }
       if (local) setScroll(scrollPx.current + v * dt);
@@ -199,17 +339,20 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   useEffect(() => {
     // A new pane starts at its bottom, with no scroll of ours to undo.
     stopFling();
+    resetFollow();
     live.current = { notches: 0, accum: 0, col: 1, row: 1 };
     p.current.onRemoteScroll(0);
     scrollPx.current = 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.paneKey]);
 
   useEffect(() => {
     // Entering History mode shows the screen above; leaving it returns to live.
     if (!renderer) return;
+    resetFollow();
     scrollPx.current = props.historyMode ? Math.min(props.history.length, grid.current.rows) * renderer.cellH : 0;
     redraw();
-  }, [props.historyMode, props.history, renderer, redraw]);
+  }, [props.historyMode, props.history, renderer, redraw, resetFollow]);
 
   // ---- gestures
   const axis = useRef<"none" | "v" | "h">("none");
@@ -234,7 +377,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         stopFling();
         axis.current = "none";
         lastY.current = 0;
-        live.current.accum = 0;
+        // A new touch tries again past where the pane last stopped.
+        follow.current.edge = 0;
         const cw = renderer?.cellW ?? 8;
         const ch = renderer?.cellH ?? 16;
         live.current.col = Math.min(Math.max(Math.floor(e.x / cw), 0), Math.max(0, grid.current.cols - 1)) + 1;
@@ -262,6 +406,9 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         } else if (axis.current === "h") {
           if (Math.abs(e.translationX) > size.current.width * 0.25 && Math.abs(e.velocityX) > 500) p.current.onSwipe(e.translationX < 0 ? 1 : -1);
         }
+      })
+      .onFinalize(() => {
+        if (!fling.current && !p.current.historyMode) landDrag();
       });
     const tap = Gesture.Tap()
       .runOnJS(true)
@@ -290,7 +437,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       });
     return Gesture.Simultaneous(pinch, Gesture.Exclusive(pan, longPress, tap));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderer, wheel, setScroll, redraw, updateGrid]);
+  }, [renderer, wheel, setScroll, redraw, updateGrid, landDrag]);
 
   // ---- keyboard: a hidden input reset to a sentinel between edits, so every edit is a delta
   const keyField = useRef<KeyField>(null);
@@ -311,6 +458,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       }
       // Typing returns to the live screen; herdr also snaps a scrolled pane to the bottom on input.
       stopFling();
+      resetFollow();
       setNotches(0);
       if (p.current.historyMode) p.current.onLeaveHistory();
       p.current.onInput(encoder.encode(out));
@@ -333,6 +481,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     blur: () => input.current?.blur(),
     wheelToBottom: () => {
       stopFling();
+      resetFollow();
       const n = live.current.notches + 2;
       for (let i = 0; i < n; i++) sendWheel(false);
       setNotches(0);
