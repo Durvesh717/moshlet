@@ -1,0 +1,312 @@
+@import "tailwindcss";
+@import "uniwind";
+@import "tw-animate-css";
+
+@theme {
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --font-sans: "Geist-Regular";
+  --font-mono: "JetBrainsMonoNerdFontMono-Regular";
+  --font-mono-bold: "JetBrainsMonoNerdFontMono-Bold";
+
+  --spacing-hairline: hairlineWidth();
+}
+
+/*
+ * On a phone each weight of Geist is its own font file, so the weight classes pick the file
+ * (a weight on its own would fall back to the system font).
+ */
+@utility font-normal {
+  font-family: "Geist-Regular";
+}
+@utility font-medium {
+  font-family: "Geist-Medium";
+}
+@utility font-semibold {
+  font-family: "Geist-SemiBold";
+}
+@utility font-bold {
+  font-family: "Geist-Bold";
+}
+@utility font-extrabold {
+  font-family: "Geist-Bold";
+}
+
+/* Read from code only (the terminal is drawn with Skia), so declared here for Uniwind to keep. */
+@theme static {
+  --color-term-fg: #e6e1f0;
+  --color-term-cursor: #a78bfa;
+  --color-term-0: #120e19;
+  --color-term-1: #f07a8a;
+  --color-term-2: #5dd3a8;
+  --color-term-3: #f2b84b;
+  --color-term-4: #8b9cfa;
+  --color-term-5: #c084fc;
+  --color-term-6: #67d3e0;
+  --color-term-7: #d9d3e6;
+  --color-term-8: #5a5070;
+  --color-term-9: #ff9aa8;
+  --color-term-10: #8be3c2;
+  --color-term-11: #f7cf7a;
+  --color-term-12: #a9b6ff;
+  --color-term-13: #d6a6ff;
+  --color-term-14: #93e4ee;
+  --color-term-15: #f5f2fa;
+  --color-logo-from: #8457f5;
+  --color-logo-to: #4a21b5;
+  --color-logo-chip: #c9b6ff;
+  --color-logo-mark: #f4f0ff;
+}
+
+/*
+ * Themes. The app is dark only: "dark" is Base, and "light" repeats it for the moment before the
+ * saved theme is applied. Every theme defines every variable.
+ *
+ * Beyond shadcn's set: brand (accent text and icons), border-strong, faint and idle text, warning
+ * and success (an agent that needs you, or is done), destructive muted and border, the drawer
+ * (sidebar), the terminal frame, scrim and dim overlays, and the terminal's own colors.
+ */
+@layer theme {
+  :root {
+    @variant dark {
+      --color-background: #0d0a12;
+      --color-foreground: #eeeaf6;
+      --color-card: #15111c;
+      --color-card-foreground: #eeeaf6;
+      --color-popover: #15111c;
+      --color-popover-foreground: #eeeaf6;
+      --color-primary: #6d3fe0;
+      --color-primary-foreground: #ffffff;
+      --color-secondary: #1d1727;
+      --color-secondary-foreground: #eeeaf6;
+      --color-muted: #1d1727;
+      --color-muted-foreground: #a69dba;
+      --color-accent: #a78bfa1f;
+      --color-accent-foreground: #eeeaf6;
+      --color-destructive: #f3a6b4;
+      --color-destructive-muted: #1a0f15;
+      --color-destructive-border: #4a2230;
+      --color-border: #2a2238;
+      --color-border-strong: #3a2f52;
+      --color-input: #3a2f52;
+      --color-ring: #a78bfa;
+      --color-brand: #a78bfa;
+      --color-faint: #8a809e;
+      --color-idle: #6e6683;
+      --color-warning: #f2b84b;
+      --color-warning-muted: #3a2a0e;
+      --color-success: #5dd3a8;
+      --color-success-muted: #10261e;
+      --color-sidebar: #120e19;
+      --color-terminal: #08060c;
+      --color-terminal-border: #221b2e;
+      --color-scrim: #050309b8;
+      --color-dim: #08060cd9;
+
+      --color-term-fg: #e6e1f0;
+      --color-term-cursor: #a78bfa;
+      --color-term-0: #120e19;
+      --color-term-1: #f07a8a;
+      --color-term-2: #5dd3a8;
+      --color-term-3: #f2b84b;
+      --color-term-4: #8b9cfa;
+      --color-term-5: #c084fc;
+      --color-term-6: #67d3e0;
+      --color-term-7: #d9d3e6;
+      --color-term-8: #5a5070;
+      --color-term-9: #ff9aa8;
+      --color-term-10: #8be3c2;
+      --color-term-11: #f7cf7a;
+      --color-term-12: #a9b6ff;
+      --color-term-13: #d6a6ff;
+      --color-term-14: #93e4ee;
+      --color-term-15: #f5f2fa;
+      --color-logo-from: #8457f5;
+      --color-logo-to: #4a21b5;
+      --color-logo-chip: #c9b6ff;
+      --color-logo-mark: #f4f0ff;
+    }
+
+    @variant light {
+      --color-background: #0d0a12;
+      --color-foreground: #eeeaf6;
+      --color-card: #15111c;
+      --color-card-foreground: #eeeaf6;
+      --color-popover: #15111c;
+      --color-popover-foreground: #eeeaf6;
+      --color-primary: #6d3fe0;
+      --color-primary-foreground: #ffffff;
+      --color-secondary: #1d1727;
+      --color-secondary-foreground: #eeeaf6;
+      --color-muted: #1d1727;
+      --color-muted-foreground: #a69dba;
+      --color-accent: #a78bfa1f;
+      --color-accent-foreground: #eeeaf6;
+      --color-destructive: #f3a6b4;
+      --color-destructive-muted: #1a0f15;
+      --color-destructive-border: #4a2230;
+      --color-border: #2a2238;
+      --color-border-strong: #3a2f52;
+      --color-input: #3a2f52;
+      --color-ring: #a78bfa;
+      --color-brand: #a78bfa;
+      --color-faint: #8a809e;
+      --color-idle: #6e6683;
+      --color-warning: #f2b84b;
+      --color-warning-muted: #3a2a0e;
+      --color-success: #5dd3a8;
+      --color-success-muted: #10261e;
+      --color-sidebar: #120e19;
+      --color-terminal: #08060c;
+      --color-terminal-border: #221b2e;
+      --color-scrim: #050309b8;
+      --color-dim: #08060cd9;
+
+      --color-term-fg: #e6e1f0;
+      --color-term-cursor: #a78bfa;
+      --color-term-0: #120e19;
+      --color-term-1: #f07a8a;
+      --color-term-2: #5dd3a8;
+      --color-term-3: #f2b84b;
+      --color-term-4: #8b9cfa;
+      --color-term-5: #c084fc;
+      --color-term-6: #67d3e0;
+      --color-term-7: #d9d3e6;
+      --color-term-8: #5a5070;
+      --color-term-9: #ff9aa8;
+      --color-term-10: #8be3c2;
+      --color-term-11: #f7cf7a;
+      --color-term-12: #a9b6ff;
+      --color-term-13: #d6a6ff;
+      --color-term-14: #93e4ee;
+      --color-term-15: #f5f2fa;
+      --color-logo-from: #8457f5;
+      --color-logo-to: #4a21b5;
+      --color-logo-chip: #c9b6ff;
+      --color-logo-mark: #f4f0ff;
+    }
+
+    /* Catppuccin Mocha: mauve accent, and the official terminal colors (black kept near the ground). */
+    @variant catppuccin {
+      --color-background: #181825;
+      --color-foreground: #cdd6f4;
+      --color-card: #1e1e2e;
+      --color-card-foreground: #cdd6f4;
+      --color-popover: #1e1e2e;
+      --color-popover-foreground: #cdd6f4;
+      --color-primary: #cba6f7;
+      --color-primary-foreground: #11111b;
+      --color-secondary: #313244;
+      --color-secondary-foreground: #cdd6f4;
+      --color-muted: #313244;
+      --color-muted-foreground: #a6adc8;
+      --color-accent: #cba6f71f;
+      --color-accent-foreground: #cdd6f4;
+      --color-destructive: #f38ba8;
+      --color-destructive-muted: #322635;
+      --color-destructive-border: #5a3a4c;
+      --color-border: #313244;
+      --color-border-strong: #45475a;
+      --color-input: #45475a;
+      --color-ring: #cba6f7;
+      --color-brand: #cba6f7;
+      --color-faint: #7f849c;
+      --color-idle: #6c7086;
+      --color-warning: #f9e2af;
+      --color-warning-muted: #333036;
+      --color-success: #a6e3a1;
+      --color-success-muted: #293034;
+      --color-sidebar: #1e1e2e;
+      --color-terminal: #1e1e2e;
+      --color-terminal-border: #313244;
+      --color-scrim: #11111bb8;
+      --color-dim: #11111bd9;
+
+      --color-term-fg: #cdd6f4;
+      --color-term-cursor: #f5e0dc;
+      --color-term-0: #181825;
+      --color-term-1: #f38ba8;
+      --color-term-2: #a6e3a1;
+      --color-term-3: #f9e2af;
+      --color-term-4: #89b4fa;
+      --color-term-5: #f5c2e7;
+      --color-term-6: #94e2d5;
+      --color-term-7: #bac2de;
+      --color-term-8: #585b70;
+      --color-term-9: #f38ba8;
+      --color-term-10: #a6e3a1;
+      --color-term-11: #f9e2af;
+      --color-term-12: #89b4fa;
+      --color-term-13: #f5c2e7;
+      --color-term-14: #94e2d5;
+      --color-term-15: #a6adc8;
+      --color-logo-from: #cba6f7;
+      --color-logo-to: #8839ef;
+      --color-logo-chip: #f5e0dc;
+      --color-logo-mark: #ffffff;
+    }
+
+    /* Gruvbox dark (hard ground): orange accent and the official terminal colors. */
+    @variant gruvbox {
+      --color-background: #1d2021;
+      --color-foreground: #ebdbb2;
+      --color-card: #282828;
+      --color-card-foreground: #ebdbb2;
+      --color-popover: #282828;
+      --color-popover-foreground: #ebdbb2;
+      --color-primary: #fe8019;
+      --color-primary-foreground: #1d2021;
+      --color-secondary: #32302f;
+      --color-secondary-foreground: #ebdbb2;
+      --color-muted: #32302f;
+      --color-muted-foreground: #bdae93;
+      --color-accent: #fe80191f;
+      --color-accent-foreground: #ebdbb2;
+      --color-destructive: #fb4934;
+      --color-destructive-muted: #382523;
+      --color-destructive-border: #602c27;
+      --color-border: #3c3836;
+      --color-border-strong: #504945;
+      --color-input: #504945;
+      --color-ring: #fe8019;
+      --color-brand: #fe8019;
+      --color-faint: #a89984;
+      --color-idle: #7c6f64;
+      --color-warning: #fabd2f;
+      --color-warning-muted: #383323;
+      --color-success: #b8bb26;
+      --color-success-muted: #303322;
+      --color-sidebar: #282828;
+      --color-terminal: #282828;
+      --color-terminal-border: #3c3836;
+      --color-scrim: #1d2021b8;
+      --color-dim: #1d2021d9;
+
+      --color-term-fg: #ebdbb2;
+      --color-term-cursor: #ebdbb2;
+      --color-term-0: #282828;
+      --color-term-1: #cc241d;
+      --color-term-2: #98971a;
+      --color-term-3: #d79921;
+      --color-term-4: #458588;
+      --color-term-5: #b16286;
+      --color-term-6: #689d6a;
+      --color-term-7: #a89984;
+      --color-term-8: #928374;
+      --color-term-9: #fb4934;
+      --color-term-10: #b8bb26;
+      --color-term-11: #fabd2f;
+      --color-term-12: #83a598;
+      --color-term-13: #d3869b;
+      --color-term-14: #8ec07c;
+      --color-term-15: #ebdbb2;
+      --color-logo-from: #fe8019;
+      --color-logo-to: #af3a03;
+      --color-logo-chip: #fabd2f;
+      --color-logo-mark: #fbf1c7;
+    }
+  }
+}
