@@ -2,8 +2,9 @@ import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane,
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2 } from "lucide-react-native";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { C, F, R } from "../theme";
+import { confirm } from "../ui/Confirm";
 import { StatusGlyph } from "../ui/kit";
 
 const backdrop = (p: BottomSheetBackdropProps) => <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.6} />;
@@ -181,10 +182,9 @@ export const PaneMapSheet = forwardRef<
             label="Close pane"
             danger
             onPress={() =>
-              Alert.alert("Close this pane?", "Whatever runs in it is ended.", [
-                { text: "Cancel", style: "cancel" },
-                { text: "Close", style: "destructive", onPress: props.onClose },
-              ])
+              void confirm({ title: "Close this pane?", message: "Whatever runs in it is ended.", action: "Close", danger: true }).then(
+                (ok) => ok && props.onClose(),
+              )
             }
           />
         </View>

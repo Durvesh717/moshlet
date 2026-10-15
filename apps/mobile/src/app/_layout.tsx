@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { loadHosts } from "../lib/hosts";
 import { useApp } from "../lib/store";
 import { C, FONT_FILES } from "../theme";
+import { ConfirmDialog } from "../ui/Confirm";
 import { Toast } from "../ui/Toast";
 
 void SplashScreen.preventAutoHideAsync();
@@ -31,6 +32,7 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.ground }, animation: "fade" }} />
         <Toast />
+        <ConfirmDialog />
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );

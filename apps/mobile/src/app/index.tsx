@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { deleteToken, saveHosts, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
 import { toast, useApp } from "../lib/store";
 import { unlock } from "../lib/unlock";
 import { C, F, R } from "../theme";
+import { confirm } from "../ui/Confirm";
 import { SectionLabel } from "../ui/kit";
 
 export default function Hosts() {
@@ -24,21 +25,19 @@ export default function Hosts() {
     router.push("/workspace");
   };
 
-  const forget = (host: Host) => {
-    Alert.alert(`Forget ${host.name}?`, "This device will need a new pairing code to connect again.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Forget",
-        style: "destructive",
-        onPress: async () => {
-          const list = useApp.getState().hosts.filter((h) => h.id !== host.id);
-          useApp.setState({ hosts: list });
-          await saveHosts(list);
-          await deleteToken(host.id);
-          toast(`Forgot ${host.name}`);
-        },
-      },
-    ]);
+  const forget = async (host: Host) => {
+    const ok = await confirm({
+      title: `Forget ${host.name}?`,
+      message: "This device will need a new pairing code to connect again.",
+      action: "Forget",
+      danger: true,
+    });
+    if (!ok) return;
+    const list = useApp.getState().hosts.filter((h) => h.id !== host.id);
+    useApp.setState({ hosts: list });
+    await saveHosts(list);
+    await deleteToken(host.id);
+    toast(`Forgot ${host.name}`);
   };
 
   const sorted = [...hosts].sort((a, b) => (b.lastUsedAt ?? b.addedAt) - (a.lastUsedAt ?? a.addedAt));
@@ -65,7 +64,7 @@ export default function Hosts() {
         </View>
       ) : (
         sorted.map((h) => (
-          <Pressable key={h.id} onPress={() => void open(h)} onLongPress={() => forget(h)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}>
+          <Pressable key={h.id} onPress={() => void open(h)} onLongPress={() => void forget(h)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}>
             <View style={styles.cardIcon}>
               <Monitor size={22} color={C.accent} />
             </View>
