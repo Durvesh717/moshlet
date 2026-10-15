@@ -121,7 +121,7 @@ export function LinkIndicator({ conn }: { conn: ConnState }) {
   let label = "…";
   if (conn.kind === "reconnecting" || conn.kind === "connecting") {
     dot = C.blocked;
-    label = conn.kind === "connecting" ? "…" : "agent…";
+    label = conn.kind === "connecting" ? "…" : "ssh…";
   } else if (link?.closed) {
     dot = C.danger;
     label = "closed";
