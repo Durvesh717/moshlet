@@ -44,6 +44,8 @@ const EMOJI_STYLE =
 const GLYPH_MAIN = 0;
 const GLYPH_SYM = 1;
 const GLYPH_PARAGRAPH = 2;
+/** A few screens' worth of rows: enough for scrolling back and forth over the same stretch. */
+const ROW_CACHE_SIZE = 400;
 
 /**
  * Draws a terminal grid with Skia into a picture. ASCII runs go out in one call; other cells
@@ -69,6 +71,9 @@ export class Renderer {
   private readonly paragraphs = new Map<string, SkParagraph>();
   private readonly scaled = new Map<string, SkFont>();
   private backdrop = DEFAULT_BG;
+  /** Recorded rows by content, so scrolling re-places rows it has drawn instead of drawing them again. */
+  private readonly rowCache = new Map<string, SkPicture>();
+  private readonly styleIds = new Map<Style, number>();
 
   constructor(fonts: TerminalFonts, fontSize: number, pixelRatio: number) {
     this.fonts = fonts;
@@ -94,6 +99,12 @@ export class Renderer {
     this.thin = Math.max(1 / this.pixelRatio, 0.9);
     this.paragraphs.clear();
     this.scaled.clear();
+    this.clearRows();
+  }
+
+  private clearRows(): void {
+    for (const pic of this.rowCache.values()) pic.dispose();
+    this.rowCache.clear();
   }
 
   grid(width: number, height: number): { cols: number; rows: number } {
@@ -125,8 +136,8 @@ export class Renderer {
       const top = shift + i * this.cellH;
       if (top >= f.height) break;
       if (v < 0) continue;
-      if (v < h) this.drawRow(canvas, f.history[v], top, ox, drawCols, false);
-      else if (v - h < s.rows) this.drawRow(canvas, s.lines[v - h], top, ox, drawCols, reverse);
+      if (v < h) this.drawCachedRow(canvas, f.history[v], top, ox, drawCols, false, f.width);
+      else if (v - h < s.rows) this.drawCachedRow(canvas, s.lines[v - h], top, ox, drawCols, reverse, f.width);
     }
 
     const cy = shift + (h + s.cursorY - first) * this.cellH;
@@ -167,6 +178,45 @@ export class Renderer {
       }
     }
     return bestCount * 2 > s.rows * s.cols ? best : DEFAULT_BG;
+  }
+
+  /**
+   * Scrolling moves rows rather than changing them, so most rows of a frame were drawn before at
+   * another height. Each row is recorded once per distinct content and replayed where it now sits.
+   */
+  private drawCachedRow(canvas: SkCanvas, line: readonly Cell[], top: number, ox: number, maxCols: number, reverse: boolean, width: number): void {
+    const n = Math.min(maxCols, line.length);
+    let key = `${reverse ? 1 : 0}|${this.backdrop}|${ox}|${n}|`;
+    for (let i = 0; i < n; i++) {
+      const c = line[i];
+      let id = this.styleIds.get(c.style);
+      if (id === undefined) {
+        id = this.styleIds.size;
+        this.styleIds.set(c.style, id);
+      }
+      key += `${c.text}\u0001${id}\u0001${c.width}\u0002`;
+    }
+    let pic = this.rowCache.get(key);
+    if (pic) {
+      // Most recently used goes last; eviction takes from the front.
+      this.rowCache.delete(key);
+    } else {
+      const rec = Skia.PictureRecorder();
+      // Glyphs can reach a little past the row (descenders, scaled emoji), so record with slack.
+      const row = rec.beginRecording(Skia.XYWHRect(0, -this.cellH, width, this.cellH * 3));
+      this.drawRow(row, line, 0, ox, maxCols, reverse);
+      pic = rec.finishRecordingAsPicture();
+      while (this.rowCache.size >= ROW_CACHE_SIZE) {
+        const oldest = this.rowCache.keys().next().value!;
+        this.rowCache.get(oldest)!.dispose();
+        this.rowCache.delete(oldest);
+      }
+    }
+    this.rowCache.set(key, pic);
+    canvas.save();
+    canvas.translate(0, top);
+    canvas.drawPicture(pic);
+    canvas.restore();
   }
 
   private drawRow(canvas: SkCanvas, line: readonly Cell[], top: number, ox: number, maxCols: number, reverse: boolean): void {
