@@ -1,7 +1,17 @@
 import { useRef } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Text } from "@/components/ui/text";
 import { create } from "zustand";
-import { C, F, R } from "../theme";
+import { useOverTerminal } from "../lib/overlay";
 
 type Question = { title: string; message: string; action: string; danger?: boolean };
 type Asked = Question & { resolve(ok: boolean): void };
@@ -25,55 +35,31 @@ function answer(ok: boolean) {
 /** Mounted once at the root. */
 export function ConfirmDialog() {
   const asked = useConfirm((s) => s.asked);
+  useOverTerminal(!!asked);
   // Keep the last question on screen while the dialog fades out.
   const last = useRef<Question | null>(null);
   if (asked) last.current = asked;
   const q = asked ?? last.current;
+  if (!q) return null;
   return (
-    <Modal visible={!!asked} transparent animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={() => answer(false)}>
-      <Pressable style={styles.scrim} onPress={() => answer(false)}>
-        {q && (
-          <Pressable style={styles.card}>
-            <Text style={styles.title}>{q.title}</Text>
-            <Text style={styles.message}>{q.message}</Text>
-            <View style={styles.actions}>
-              <Pressable onPress={() => answer(false)} style={({ pressed }) => [styles.button, styles.cancel, pressed && styles.pressed]}>
-                <Text style={styles.buttonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => answer(true)}
-                style={({ pressed }) => [styles.button, q.danger ? styles.danger : styles.primary, pressed && styles.pressed]}
-              >
-                <Text style={[styles.buttonText, { color: q.danger ? C.danger : "#fff" }]}>{q.action}</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        )}
-      </Pressable>
-    </Modal>
+    <AlertDialog open={!!asked} onOpenChange={(open) => !open && answer(false)}>
+      <AlertDialogContent className="w-full max-w-[420px] gap-2 self-center rounded-xl border-border-strong bg-card p-[22px]">
+        <AlertDialogHeader className="gap-2">
+          <AlertDialogTitle className="text-left text-[19px]">{q.title}</AlertDialogTitle>
+          <AlertDialogDescription className="text-left text-[15px] leading-[21px]">{q.message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="mt-3.5 flex-row gap-2.5">
+          <AlertDialogCancel onPress={() => answer(false)} className="h-12 flex-1 rounded-lg border-border-strong bg-secondary">
+            <Text className="font-semibold text-[15px]">Cancel</Text>
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onPress={() => answer(true)}
+            className={q.danger ? "h-12 flex-1 rounded-lg border border-destructive-border bg-destructive-muted" : "h-12 flex-1 rounded-lg"}
+          >
+            <Text className={q.danger ? "font-semibold text-[15px] text-destructive" : "font-semibold text-[15px] text-primary-foreground"}>{q.action}</Text>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
-
-const styles = StyleSheet.create({
-  scrim: { flex: 1, backgroundColor: C.scrim, justifyContent: "center", padding: 28 },
-  card: {
-    backgroundColor: C.surface,
-    borderColor: C.line2,
-    borderWidth: 1,
-    borderRadius: R.xl,
-    padding: 22,
-    gap: 8,
-    maxWidth: 420,
-    width: "100%",
-    alignSelf: "center",
-  },
-  title: { fontFamily: F.semibold, fontSize: 19, color: C.text },
-  message: { fontFamily: F.regular, fontSize: 15, lineHeight: 21, color: C.muted },
-  actions: { flexDirection: "row", gap: 10, marginTop: 14 },
-  button: { flex: 1, height: 48, borderRadius: R.lg, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  cancel: { backgroundColor: C.surface2, borderColor: C.line2 },
-  primary: { backgroundColor: C.accentStrong, borderColor: C.accentStrong },
-  danger: { backgroundColor: C.dangerBg, borderColor: C.dangerLine },
-  pressed: { opacity: 0.75 },
-  buttonText: { fontFamily: F.semibold, fontSize: 15, color: C.text },
-});

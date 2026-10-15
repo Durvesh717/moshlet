@@ -1,28 +1,43 @@
 import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@corral/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
-import { Bot, Columns2, Pencil, Rows2, Send, Trash2 } from "lucide-react-native";
+import { Bot, Columns2, Pencil, Rows2, Send, Trash2, type LucideIcon } from "lucide-react-native";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { C, F, R } from "../theme";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Text } from "@/components/ui/text";
+import { useColors } from "@/lib/colors";
+import { cn } from "@/lib/utils";
 import { confirm } from "../ui/Confirm";
 import { StatusGlyph } from "../ui/kit";
 
 const backdrop = (p: BottomSheetBackdropProps) => <BottomSheetBackdrop {...p} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.6} />;
 
-const baseSheetProps = {
-  backdropComponent: backdrop,
-  backgroundStyle: { backgroundColor: C.surface, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-  handleIndicatorStyle: { backgroundColor: C.line2, width: 44 },
-  enableDynamicSizing: true,
-  keyboardBehavior: "interactive" as const,
-  keyboardBlurBehavior: "restore" as const,
-};
-
 /** Sheets stop below the status bar when they grow (to their content, or above the keyboard). */
 function useSheetProps() {
   const insets = useSafeAreaInsets();
-  return { ...baseSheetProps, topInset: insets.top };
+  const c = useColors();
+  return {
+    backdropComponent: backdrop,
+    backgroundStyle: { backgroundColor: c.card, borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+    handleIndicatorStyle: { backgroundColor: c.borderStrong, width: 44 },
+    enableDynamicSizing: true,
+    keyboardBehavior: "interactive" as const,
+    keyboardBlurBehavior: "restore" as const,
+    topInset: insets.top,
+  };
+}
+
+const SHEET = { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 34, gap: 12 };
+
+/** gorhom's text input takes style objects, so its colors come from the theme here. */
+function useSheetInputStyle() {
+  const c = useColors();
+  return {
+    style: { flex: 1, minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: c.borderStrong, backgroundColor: c.background, paddingHorizontal: 16, color: c.foreground, fontFamily: "Geist-Regular", fontSize: 16 },
+    placeholderTextColor: c.faint,
+  };
 }
 
 /** The agent's approval dialog, read off its screen, as big buttons; plus a reply box. */
@@ -31,6 +46,7 @@ export const ApprovalSheet = forwardRef<
   { agentName: string; where: string; read(): Promise<string>; onChoose(keys: string[]): void; onReply(text: string): void }
 >(function ApprovalSheet(props, ref) {
   const sheetProps = useSheetProps();
+  const input = useSheetInputStyle();
   const [prompt, setPrompt] = useState<ApprovalPrompt | null>(null);
   const [reply, setReply] = useState("");
   const { read } = props;
@@ -42,24 +58,24 @@ export const ApprovalSheet = forwardRef<
   }, [read]);
   return (
     <BottomSheetModal ref={ref} {...sheetProps} onChange={(i) => i >= 0 && load()}>
-      <BottomSheetScrollView contentContainerStyle={styles.sheet}>
-        <View style={styles.head}>
-          <View style={styles.warn}>
+      <BottomSheetScrollView contentContainerStyle={SHEET}>
+        <View className="mb-1 flex-row items-center gap-3.5">
+          <View className="size-[52px] items-center justify-center rounded-2xl bg-warning-muted">
             <StatusGlyph status="blocked" size={22} />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>{props.agentName} needs approval</Text>
-            <Text style={styles.sub}>{props.where}</Text>
+          <View className="flex-1">
+            <Text className="font-bold text-[21px]">{props.agentName} needs approval</Text>
+            <Text className="mt-0.5 text-sm text-muted-foreground">{props.where}</Text>
           </View>
         </View>
         {!prompt ? (
-          <ActivityIndicator color={C.accent} style={{ margin: 24 }} />
+          <ActivityIndicator colorClassName="accent-brand" className="m-6" />
         ) : (
           <>
             {prompt.question.length > 0 && (
-              <View style={styles.preview}>
+              <View className="gap-1 rounded-lg border border-border bg-terminal p-3.5">
                 {prompt.question.map((l, i) => (
-                  <Text key={i} style={styles.previewText} numberOfLines={2}>
+                  <Text key={i} className="font-mono text-[13px]" numberOfLines={2}>
                     {l}
                   </Text>
                 ))}
@@ -69,41 +85,43 @@ export const ApprovalSheet = forwardRef<
               const primary = i === 0;
               const negative = isNegative(o);
               return (
-                <Pressable
+                <Button
                   key={`${i}-${o.label}`}
+                  variant={primary ? "default" : "secondary"}
                   onPress={() => props.onChoose(o.keys)}
-                  style={({ pressed }) => [
-                    styles.option,
-                    primary ? styles.optionPrimary : negative ? styles.optionNegative : null,
-                    pressed && { opacity: 0.8 },
-                  ]}
+                  className={cn(
+                    "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] active:opacity-80",
+                    primary ? "border-primary" : negative ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
+                  )}
                 >
-                  {o.number && <Text style={[styles.optionNum, primary && { color: "#fff" }]}>{o.number}</Text>}
-                  <Text style={[styles.optionText, primary && { color: "#fff", fontFamily: F.semibold }, negative && !primary && { color: C.danger }]}>{o.label}</Text>
-                </Pressable>
+                  {o.number && <Text className={cn("font-mono text-sm", primary ? "text-primary-foreground" : "text-muted-foreground")}>{o.number}</Text>}
+                  <Text
+                    className={cn(
+                      "flex-1 text-base",
+                      primary ? "font-semibold text-primary-foreground" : negative ? "font-medium text-destructive" : "font-medium text-foreground",
+                    )}
+                  >
+                    {o.label}
+                  </Text>
+                </Button>
               );
             })}
           </>
         )}
-        <View style={styles.replyRow}>
-          <BottomSheetTextInput
-            value={reply}
-            onChangeText={setReply}
-            placeholder={`Reply to ${props.agentName}`}
-            placeholderTextColor={C.faint}
-            style={styles.reply}
-          />
-          <Pressable
+        <View className="mt-1.5 flex-row items-center gap-2.5">
+          <BottomSheetTextInput value={reply} onChangeText={setReply} placeholder={`Reply to ${props.agentName}`} {...input} />
+          <Button
             accessibilityLabel="Send reply"
+            size="icon"
             onPress={() => {
               if (!reply.trim()) return;
               props.onReply(reply);
               setReply("");
             }}
-            style={({ pressed }) => [styles.send, pressed && { opacity: 0.8 }]}
+            className="size-[52px] rounded-full active:opacity-80"
           >
-            <Send size={20} color="#fff" />
-          </Pressable>
+            <Icon as={Send} size={20} className="text-primary-foreground" />
+          </Button>
         </View>
       </BottomSheetScrollView>
     </BottomSheetModal>
@@ -136,9 +154,9 @@ export const PaneMapSheet = forwardRef<
 
   return (
     <BottomSheetModal ref={ref} {...sheetProps}>
-      <BottomSheetScrollView contentContainerStyle={styles.sheet}>
-        <Text style={styles.title}>Panes</Text>
-        <View style={[styles.map, { height: mapHeight }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <BottomSheetScrollView contentContainerStyle={SHEET}>
+        <Text className="font-bold text-[21px]">Panes</Text>
+        <View className="rounded-lg border border-border bg-terminal" style={{ height: mapHeight }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
           {scale > 0 &&
             (layout?.panes ?? []).map((lp, i) => {
               const pane = panes.find((p) => p.pane_id === lp.pane_id);
@@ -148,27 +166,24 @@ export const PaneMapSheet = forwardRef<
                 <Pressable
                   key={lp.pane_id}
                   onPress={() => props.onOpen(lp.pane_id)}
-                  style={[
-                    styles.mapPane,
-                    {
-                      left: (lp.rect.x - area.x) * scale + 2,
-                      top: (lp.rect.y - area.y) * sy + 2,
-                      width: lp.rect.width * scale - 4,
-                      height: lp.rect.height * sy - 4,
-                    },
-                    current && styles.mapPaneCurrent,
-                  ]}
+                  className={cn("absolute gap-1 rounded-sm border p-2", current ? "border-brand bg-accent" : "border-border-strong bg-card")}
+                  style={{
+                    left: (lp.rect.x - area.x) * scale + 2,
+                    top: (lp.rect.y - area.y) * sy + 2,
+                    width: lp.rect.width * scale - 4,
+                    height: lp.rect.height * sy - 4,
+                  }}
                 >
-                  <Text style={[styles.mapLabel, current && { color: C.accent }]}>{i + 1}</Text>
+                  <Text className={cn("font-semibold text-sm", current && "text-brand")}>{i + 1}</Text>
                   {agent ? (
-                    <View style={styles.mapAgent}>
+                    <View className="flex-row items-center gap-[5px]">
                       <StatusGlyph status={agent.agent_status} size={11} />
-                      <Text style={styles.mapSub} numberOfLines={1}>
+                      <Text className="shrink font-mono text-[11px] text-muted-foreground" numberOfLines={1}>
                         {agent.name ?? agent.agent}
                       </Text>
                     </View>
                   ) : (
-                    <Text style={styles.mapSub} numberOfLines={1}>
+                    <Text className="shrink font-mono text-[11px] text-muted-foreground" numberOfLines={1}>
                       {pane?.foreground_cwd?.split("/").pop() ?? ""}
                     </Text>
                   )}
@@ -176,18 +191,18 @@ export const PaneMapSheet = forwardRef<
               );
             })}
         </View>
-        <View style={styles.actions}>
-          <Action icon={<Columns2 size={18} color={C.text} />} label="Split right" onPress={() => props.onSplit("right")} />
-          <Action icon={<Rows2 size={18} color={C.text} />} label="Split down" onPress={() => props.onSplit("down")} />
+        <View className="flex-row gap-2.5">
+          <Action icon={Columns2} label="Split right" onPress={() => props.onSplit("right")} />
+          <Action icon={Rows2} label="Split down" onPress={() => props.onSplit("down")} />
         </View>
-        <View style={styles.actions}>
-          <Action icon={<Bot size={18} color={C.text} />} label="Start claude" onPress={() => props.onStartAgent("claude")} />
-          <Action icon={<Bot size={18} color={C.text} />} label="Start codex" onPress={() => props.onStartAgent("codex")} />
+        <View className="flex-row gap-2.5">
+          <Action icon={Bot} label="Start claude" onPress={() => props.onStartAgent("claude")} />
+          <Action icon={Bot} label="Start codex" onPress={() => props.onStartAgent("codex")} />
         </View>
-        <View style={styles.actions}>
-          <Action icon={<Pencil size={18} color={C.text} />} label="Rename tab" onPress={props.onRename} />
+        <View className="flex-row gap-2.5">
+          <Action icon={Pencil} label="Rename tab" onPress={props.onRename} />
           <Action
-            icon={<Trash2 size={18} color={C.danger} />}
+            icon={Trash2}
             label="Close pane"
             danger
             onPress={() =>
@@ -202,12 +217,19 @@ export const PaneMapSheet = forwardRef<
   );
 });
 
-function Action(props: { icon: React.ReactNode; label: string; onPress(): void; danger?: boolean }) {
+function Action(props: { icon: LucideIcon; label: string; onPress(): void; danger?: boolean }) {
   return (
-    <Pressable onPress={props.onPress} style={({ pressed }) => [styles.action, props.danger && styles.actionDanger, pressed && { opacity: 0.8 }]}>
-      {props.icon}
-      <Text style={[styles.actionText, props.danger && { color: C.danger }]}>{props.label}</Text>
-    </Pressable>
+    <Button
+      variant="secondary"
+      onPress={props.onPress}
+      className={cn(
+        "h-[50px] flex-1 justify-start gap-2.5 rounded-lg border px-3.5 active:opacity-80",
+        props.danger ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
+      )}
+    >
+      <Icon as={props.icon} size={18} className={props.danger ? "text-destructive" : "text-foreground"} />
+      <Text className={cn("font-medium text-[15px]", props.danger ? "text-destructive" : "text-foreground")}>{props.label}</Text>
+    </Button>
   );
 }
 
@@ -220,6 +242,7 @@ export function useTextPrompt() {
 
 export function TextPromptSheet(props: { state: { title: string; initial: string } | null; done(v: string | null): void }) {
   const sheetProps = useSheetProps();
+  const input = useSheetInputStyle();
   const [value, setValue] = useState("");
   const sheet = useRef<BottomSheetModal>(null);
   useEffect(() => {
@@ -230,41 +253,13 @@ export function TextPromptSheet(props: { state: { title: string; initial: string
   if (!props.state) return null;
   return (
     <BottomSheetModal ref={sheet} {...sheetProps} onDismiss={() => props.done(null)}>
-      <BottomSheetScrollView contentContainerStyle={styles.sheet}>
-        <Text style={styles.title}>{props.state.title}</Text>
-        <BottomSheetTextInput value={value} onChangeText={setValue} autoFocus style={styles.reply} placeholderTextColor={C.faint} />
-        <Pressable onPress={() => props.done(value.trim())} style={({ pressed }) => [styles.option, styles.optionPrimary, pressed && { opacity: 0.8 }]}>
-          <Text style={[styles.optionText, { color: "#fff", fontFamily: F.semibold }]}>Save</Text>
-        </Pressable>
+      <BottomSheetScrollView contentContainerStyle={SHEET}>
+        <Text className="font-bold text-[21px]">{props.state.title}</Text>
+        <BottomSheetTextInput value={value} onChangeText={setValue} autoFocus {...input} />
+        <Button onPress={() => props.done(value.trim())} className="min-h-14 rounded-lg active:opacity-80">
+          <Text className="font-semibold text-base text-primary-foreground">Save</Text>
+        </Button>
       </BottomSheetScrollView>
     </BottomSheetModal>
   );
 }
-
-const styles = StyleSheet.create({
-  sheet: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 34, gap: 12 },
-  head: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 4 },
-  warn: { width: 52, height: 52, borderRadius: 16, backgroundColor: C.blockedBg, alignItems: "center", justifyContent: "center" },
-  title: { fontFamily: F.bold, fontSize: 21, color: C.text },
-  sub: { fontFamily: F.regular, fontSize: 14, color: C.muted, marginTop: 2 },
-  preview: { backgroundColor: C.terminal, borderColor: C.line, borderWidth: 1, borderRadius: R.lg, padding: 14, gap: 4 },
-  previewText: { fontFamily: F.mono, fontSize: 13, color: C.text },
-  option: { flexDirection: "row", alignItems: "center", gap: 14, minHeight: 56, borderRadius: R.lg, borderWidth: 1, borderColor: C.line2, backgroundColor: C.surface2, paddingHorizontal: 18 },
-  optionPrimary: { backgroundColor: C.accentStrong, borderColor: C.accentStrong },
-  optionNegative: { backgroundColor: C.dangerBg, borderColor: C.dangerLine },
-  optionNum: { fontFamily: F.mono, fontSize: 14, color: C.muted },
-  optionText: { flex: 1, fontFamily: F.medium, fontSize: 16, color: C.text },
-  replyRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
-  reply: { flex: 1, minHeight: 52, borderRadius: R.lg, borderWidth: 1, borderColor: C.line2, backgroundColor: C.ground, paddingHorizontal: 16, color: C.text, fontFamily: F.regular, fontSize: 16 },
-  send: { width: 52, height: 52, borderRadius: 26, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center" },
-  map: { backgroundColor: C.terminal, borderRadius: R.lg, borderWidth: 1, borderColor: C.line },
-  mapPane: { position: "absolute", borderRadius: R.sm, borderWidth: 1, borderColor: C.line2, backgroundColor: C.surface, padding: 8, gap: 4 },
-  mapPaneCurrent: { borderColor: C.accent, backgroundColor: C.accentTint },
-  mapLabel: { fontFamily: F.semibold, fontSize: 14, color: C.text },
-  mapAgent: { flexDirection: "row", alignItems: "center", gap: 5 },
-  mapSub: { fontFamily: F.mono, fontSize: 11, color: C.muted, flexShrink: 1 },
-  actions: { flexDirection: "row", gap: 10 },
-  action: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, height: 50, borderRadius: R.lg, borderWidth: 1, borderColor: C.line2, backgroundColor: C.surface2, paddingHorizontal: 14 },
-  actionDanger: { backgroundColor: C.dangerBg, borderColor: C.dangerLine },
-  actionText: { fontFamily: F.medium, fontSize: 15, color: C.text },
-});

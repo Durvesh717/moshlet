@@ -1,9 +1,13 @@
 import { tabName, type Agent, type Pane, type Tab, type Workspace } from "@corral/core";
 import { ChevronDown, History, LayoutGrid, Menu, Plus } from "lucide-react-native";
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Icon } from "@/components/ui/icon";
+import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
+import { useOverTerminal } from "../lib/overlay";
 import { useApp, type ConnState } from "../lib/store";
-import { C, F, R } from "../theme";
 import { Chip, IconButton, StatusGlyph } from "../ui/kit";
 
 export function shortCwd(path?: string): string {
@@ -31,85 +35,64 @@ export function TopBar(props: {
   onHistory(): void;
   onPaneMap(): void;
 }) {
-  const [tabsOpen, setTabsOpen] = useState(false);
   const title = props.agent ? (props.agent.name ?? props.agent.agent) : shortCwd(props.pane?.foreground_cwd ?? props.pane?.cwd) || "terminal";
+  const [tabsOpen, setTabsOpen] = useState(false);
+  useOverTerminal(tabsOpen);
   return (
-    <View style={styles.bar}>
+    <View className="flex-row items-center gap-2 px-2.5 py-1.5">
       <View>
         <IconButton icon={Menu} label="Open sidebar" onPress={props.onMenu} />
-        {props.blockedElsewhere > 0 && <View style={styles.badge} />}
+        {props.blockedElsewhere > 0 && <View className="absolute right-0.5 top-0.5 size-2.5 rounded-full border-2 border-background bg-warning" />}
       </View>
-      <Pressable style={styles.titleBox} onPress={() => props.workspace && setTabsOpen(true)}>
-        <View style={styles.row}>
-          {/* On narrow screens the workspace name gives way first; the tab name is the useful part. */}
-          {props.workspace && (
-            <Text style={styles.crumb} numberOfLines={1}>
-              {props.workspace.label}
-            </Text>
-          )}
-          {props.workspace && props.tab && <Text style={styles.crumbTab}>·</Text>}
-          {props.tab && (
-            <Text style={styles.crumbTab} numberOfLines={1}>
-              {tabName(props.tab)}
-            </Text>
-          )}
-          {props.workspace && <ChevronDown size={13} color={C.faint} />}
-        </View>
-        <View style={styles.row}>
-          {props.agent && props.agent.agent_status !== "unknown" && <StatusGlyph status={props.agent.agent_status} size={11} />}
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-        </View>
-      </Pressable>
+      <DropdownMenu onOpenChange={setTabsOpen}>
+        <DropdownMenuTrigger asChild disabled={!props.workspace}>
+          <Pressable className="flex-1 rounded-md px-1.5 py-0.5 active:bg-accent">
+            <View className="flex-row items-center gap-[5px]">
+              {/* On narrow screens the workspace name gives way first; the tab name is the useful part. */}
+              {props.workspace && (
+                <Text className="shrink text-xs text-muted-foreground" numberOfLines={1}>
+                  {props.workspace.label}
+                </Text>
+              )}
+              {props.workspace && props.tab && <Text className="text-xs text-muted-foreground">·</Text>}
+              {props.tab && (
+                <Text className="max-w-[140px] shrink-0 text-xs text-muted-foreground" numberOfLines={1}>
+                  {tabName(props.tab)}
+                </Text>
+              )}
+              {props.workspace && <Icon as={ChevronDown} size={13} className="text-faint" />}
+            </View>
+            <View className="flex-row items-center gap-[5px]">
+              {props.agent && props.agent.agent_status !== "unknown" && <StatusGlyph status={props.agent.agent_status} size={11} />}
+              <Text className="shrink font-semibold text-base" numberOfLines={1}>
+                {title}
+              </Text>
+            </View>
+          </Pressable>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" sideOffset={6} className="min-w-[200px] rounded-lg border-border bg-card py-1.5">
+          {props.tabs.map((t) => {
+            const current = t.tab_id === props.tab?.tab_id;
+            return (
+              <DropdownMenuItem key={t.tab_id} onPress={() => props.onOpenTab(t.tab_id)} className="h-[46px] gap-3 px-3.5">
+                <View className="w-4 items-center">{t.agent_status !== "unknown" && <StatusGlyph status={t.agent_status} size={12} />}</View>
+                <Text className={cn("flex-1 text-[15px]", current ? "font-semibold text-foreground" : "text-muted-foreground")}>{tabName(t)}</Text>
+                {current && <View className="size-1.5 rounded-full bg-brand" />}
+              </DropdownMenuItem>
+            );
+          })}
+          <DropdownMenuSeparator className="my-1 bg-border" />
+          <DropdownMenuItem onPress={props.onNewTab} className="h-[46px] gap-3 px-3.5">
+            <View className="w-4 items-center">
+              <Icon as={Plus} size={16} className="text-muted-foreground" />
+            </View>
+            <Text className="flex-1 text-[15px] text-foreground">New tab</Text>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <LinkIndicator conn={props.conn} />
       <IconButton icon={History} label="History" size={36} active={props.historyMode} onPress={props.onHistory} />
-      <Chip
-        label={`${props.paneIndex}/${props.paneCount}`}
-        onPress={props.onPaneMap}
-        height={36}
-        background={C.surface}
-        border={C.line}
-        color={C.muted}
-        leading={<LayoutGrid size={15} color={C.muted} />}
-      />
-
-      <Modal visible={tabsOpen} transparent animationType="fade" onRequestClose={() => setTabsOpen(false)}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setTabsOpen(false)}>
-          <View style={styles.menu}>
-            {props.tabs.map((t) => {
-              const current = t.tab_id === props.tab?.tab_id;
-              return (
-                <Pressable
-                  key={t.tab_id}
-                  style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: C.surface2 }]}
-                  onPress={() => {
-                    setTabsOpen(false);
-                    props.onOpenTab(t.tab_id);
-                  }}
-                >
-                  <View style={styles.menuIcon}>{t.agent_status !== "unknown" && <StatusGlyph status={t.agent_status} size={12} />}</View>
-                  <Text style={[styles.menuText, current && styles.menuCurrent]}>{tabName(t)}</Text>
-                  {current && <View style={styles.dot} />}
-                </Pressable>
-              );
-            })}
-            <View style={styles.divider} />
-            <Pressable
-              style={({ pressed }) => [styles.menuItem, pressed && { backgroundColor: C.surface2 }]}
-              onPress={() => {
-                setTabsOpen(false);
-                props.onNewTab();
-              }}
-            >
-              <View style={styles.menuIcon}>
-                <Plus size={16} color={C.muted} />
-              </View>
-              <Text style={[styles.menuText, { color: C.text }]}>New tab</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      <Chip label={`${props.paneIndex}/${props.paneCount}`} onPress={props.onPaneMap} height={36} tone="muted" icon={LayoutGrid} />
     </View>
   );
 }
@@ -117,58 +100,28 @@ export function TopBar(props: {
 /** Reads the link itself: its latency changes often, and only this needs to redraw for it. */
 export function LinkIndicator({ conn }: { conn: ConnState }) {
   const link = useApp((s) => s.link);
-  let dot: string = C.idle;
+  let dot = "bg-idle";
   let label = "…";
   if (conn.kind === "reconnecting" || conn.kind === "connecting") {
-    dot = C.blocked;
+    dot = "bg-warning";
     label = conn.kind === "connecting" ? "…" : "ssh…";
   } else if (link?.closed) {
-    dot = C.danger;
+    dot = "bg-destructive";
     label = "closed";
   } else if (link?.stale) {
-    dot = C.blocked;
+    dot = "bg-warning";
     label = link.heardAgoSecs !== null ? `${link.heardAgoSecs}s` : "…";
   } else if (link?.rttMs !== null && link?.rttMs !== undefined) {
-    dot = C.done;
+    dot = "bg-success";
     label = `${link.rttMs} ms`;
   } else if (link) {
-    dot = C.done;
+    dot = "bg-success";
     label = "mosh";
   }
   return (
-    <View style={styles.link}>
-      <View style={[styles.linkDot, { backgroundColor: dot }]} />
-      <Text style={styles.linkText}>{label}</Text>
+    <View className="flex-row items-center gap-[5px]">
+      <View className={cn("size-[7px] rounded-full", dot)} />
+      <Text className="font-mono text-[11px] text-muted-foreground">{label}</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  bar: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 10, paddingTop: 6, paddingBottom: 6 },
-  badge: { position: "absolute", top: 2, right: 2, width: 10, height: 10, borderRadius: 5, backgroundColor: C.blocked, borderWidth: 2, borderColor: C.ground },
-  titleBox: { flex: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: R.md },
-  row: { flexDirection: "row", alignItems: "center", gap: 5 },
-  crumb: { fontFamily: F.regular, fontSize: 12, color: C.muted, flexShrink: 1 },
-  crumbTab: { fontFamily: F.regular, fontSize: 12, color: C.muted, flexShrink: 0, maxWidth: 140 },
-  title: { fontFamily: F.semibold, fontSize: 16, color: C.text, flexShrink: 1 },
-  link: { flexDirection: "row", alignItems: "center", gap: 5 },
-  linkDot: { width: 7, height: 7, borderRadius: 4 },
-  linkText: { fontFamily: F.mono, fontSize: 11, color: C.muted },
-  menu: {
-    position: "absolute",
-    top: 96,
-    left: 62,
-    minWidth: 200,
-    backgroundColor: C.surface,
-    borderColor: C.line,
-    borderWidth: 1,
-    borderRadius: R.lg,
-    paddingVertical: 6,
-  },
-  menuItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, height: 46 },
-  menuIcon: { width: 16, alignItems: "center" },
-  menuText: { fontFamily: F.regular, fontSize: 15, color: C.muted, flex: 1 },
-  menuCurrent: { fontFamily: F.semibold, color: C.text },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: C.accent },
-  divider: { height: 1, backgroundColor: C.line, marginVertical: 4 },
-});

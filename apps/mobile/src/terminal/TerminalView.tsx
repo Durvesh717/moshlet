@@ -4,6 +4,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
+import { overTerminal } from "../lib/overlay";
 import { TERMINAL_FONTS } from "../theme";
 import { Renderer } from "./renderer";
 
@@ -430,6 +431,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
 
   // ---- gestures
   const axis = useRef<"none" | "v" | "h">("none");
+  /** The touch began while a menu or dialog covered the terminal: it was meant for that. */
+  const ignored = useRef(false);
   const lastY = useRef(0);
   const pinchStart = useRef(props.fontSize);
   // Declared before the gestures: their callbacks capture these when they are built.
@@ -448,6 +451,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       .runOnJS(true)
       .minDistance(6)
       .onBegin((e) => {
+        ignored.current = overTerminal();
+        if (ignored.current) return;
         stopFling();
         axis.current = "none";
         lastY.current = 0;
@@ -460,6 +465,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         p.current.onTouchStart();
       })
       .onUpdate((e) => {
+        if (ignored.current) return;
         if (axis.current === "none") {
           // The first update can come before any movement; pick the axis once there is some.
           const ax = Math.abs(e.translationX);
@@ -475,6 +481,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         else wheel(dy);
       })
       .onEnd((e) => {
+        if (ignored.current) return;
         if (axis.current === "v") {
           if (Math.abs(e.velocityY) > 200) startFling(e.velocityY, p.current.historyMode);
         } else if (axis.current === "h") {
@@ -482,15 +489,18 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         }
       })
       .onFinalize(() => {
-        if (!fling.current && !p.current.historyMode) landDrag();
+        if (!ignored.current && !fling.current && !p.current.historyMode) landDrag();
       });
     const tap = Gesture.Tap()
       .runOnJS(true)
-      .onEnd(() => showKeyboard());
+      .onBegin(() => {
+        ignored.current = overTerminal();
+      })
+      .onEnd(() => !ignored.current && showKeyboard());
     const longPress = Gesture.LongPress()
       .runOnJS(true)
       .minDuration(450)
-      .onStart(() => p.current.onLongPress());
+      .onStart(() => !overTerminal() && p.current.onLongPress());
     const pinch = Gesture.Pinch()
       .runOnJS(true)
       .onBegin(() => {

@@ -7,10 +7,11 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useCSSVariable } from "uniwind";
 import { loadTheme } from "../lib/appearance";
 import { loadHosts } from "../lib/hosts";
 import { useApp } from "../lib/store";
-import { C, FONT_FILES } from "../theme";
+import { FONT_FILES } from "../theme";
 import { ConfirmDialog } from "../ui/Confirm";
 import { Toast } from "../ui/Toast";
 
@@ -20,6 +21,7 @@ export default function RootLayout() {
   const [fontsLoaded] = useFonts(FONT_FILES);
   const hostsLoaded = useApp((s) => s.hostsLoaded);
   const [themeLoaded, setThemeLoaded] = useState(false);
+  const ground = useCSSVariable("--color-background") as string;
 
   useEffect(() => {
     void loadHosts().then((hosts) => useApp.setState({ hosts, hostsLoaded: true }));
@@ -33,10 +35,10 @@ export default function RootLayout() {
 
   if (!ready) return null;
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: C.ground }}>
+    <GestureHandlerRootView className="flex-1 bg-background">
       <BottomSheetModalProvider>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.ground }, animation: "fade" }} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: ground }, animation: "fade" }} />
         <Toast />
         <ConfirmDialog />
         <PortalHost />

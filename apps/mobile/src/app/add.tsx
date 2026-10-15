@@ -1,16 +1,23 @@
 import { HostLink, type HostCheck } from "@corral/core";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ArrowLeft, Check, Copy, KeyRound, ShieldCheck, X } from "lucide-react-native";
+import { ArrowLeft, Check, CircleAlert, Copy, KeyRound, ShieldCheck, X } from "lucide-react-native";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, type TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
 import { devicePublicKey, SshConnection } from "../../modules/corral-native/ssh";
 import { newHostId, saveHosts, type Host } from "../lib/hosts";
 import { closeHost, openHost } from "../lib/session";
 import { deviceIdentity } from "../lib/ssh";
 import { toast, useApp } from "../lib/store";
-import { C, F, R } from "../theme";
 import { Chip, IconButton } from "../ui/kit";
 
 type Step = "prepare" | "where" | "trust" | "signin" | "check";
@@ -214,128 +221,125 @@ export default function AddComputer() {
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior="padding">
+    <KeyboardAvoidingView className="flex-1 bg-background" behavior="padding">
       <ScrollView
         ref={scroll}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}
+        contentContainerClassName="gap-4"
+        contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.header}>
+        <View className="flex-row items-center gap-3">
           <IconButton icon={ArrowLeft} label="Back" onPress={back} />
-          <Text style={styles.headerTitle}>{existing ? `Set up ${existing.name} again` : "Add a computer"}</Text>
+          <Text className="font-medium text-[15px] text-muted-foreground">{existing ? `Set up ${existing.name} again` : "Add a computer"}</Text>
         </View>
         <Progress index={stepIndex} />
 
         {step === "prepare" && (
           <>
-            <Text style={styles.title}>Get the computer ready</Text>
-            <Text style={styles.body}>
+            <Title>Get the computer ready</Title>
+            <Body>
               Corral signs in to the computer running herdr over SSH, like a terminal would, and runs your panes over mosh. Nothing of Corral's is installed there. Once per computer:
-            </Text>
-            <View style={styles.osRow}>
+            </Body>
+            <View className="flex-row flex-wrap gap-2">
               {(Object.keys(OS_LABEL) as Os[]).map((o) => (
                 <Chip key={o} label={OS_LABEL[o]} selected={os === o} onPress={() => setOs(o)} height={34} />
               ))}
             </View>
             <Item n={1} title="Tailscale on both">
-              <Text style={styles.itemBody}>Sign this device and the computer in to the same Tailscale account.</Text>
+              <Small>Sign this device and the computer in to the same Tailscale account.</Small>
             </Item>
             <Item n={2} title="SSH sign-in turned on">
-              {os === "macos" ? (
-                <Text style={styles.itemBody}>System Settings → General → Sharing → Remote Login, or:</Text>
-              ) : (
-                <Text style={styles.itemBody}>Start the SSH server:</Text>
-              )}
+              <Small>{os === "macos" ? "System Settings → General → Sharing → Remote Login, or:" : "Start the SSH server:"}</Small>
               <Command text={SSH_ON[os]} onCopy={copy} />
             </Item>
             <Item n={3} title="mosh installed">
-              <Text style={styles.itemBody}>Panes stream over mosh, so they survive bad networks and sleep.</Text>
+              <Small>Panes stream over mosh, so they survive bad networks and sleep.</Small>
               <Command text={MOSH_INSTALL[os]} onCopy={copy} />
             </Item>
             <Item n={4} title="herdr running">
-              <Text style={styles.itemBody}>Start herdr there as usual. Corral shows its workspaces, tabs and agents.</Text>
+              <Small>Start herdr there as usual. Corral shows its workspaces, tabs and agents.</Small>
             </Item>
-            <Text style={styles.note}>Corral checks all of this in the last step and tells you what's missing.</Text>
-            <Button label="Continue" onPress={() => go("where")} />
+            <Note>Corral checks all of this in the last step and tells you what's missing.</Note>
+            <Action label="Continue" onPress={() => go("where")} />
           </>
         )}
 
         {step === "where" && (
           <>
-            <Text style={styles.title}>Find the computer</Text>
-            <Text style={styles.body}>
-              Its Tailscale name is in the Tailscale app on this device, or run <Text style={styles.code}>tailscale status</Text> on the computer.
-            </Text>
+            <Title>Find the computer</Title>
+            <Body>
+              Its Tailscale name is in the Tailscale app on this device, or run <Code>tailscale status</Code> on the computer.
+            </Body>
             <Field label="Tailscale name or address">
-              <TextInput
+              <Input
                 value={address}
                 onChangeText={setAddress}
                 placeholder="my-laptop or 100.x.y.z"
-                placeholderTextColor={C.idle}
+                placeholderTextColorClassName="accent-idle"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType={Platform.OS === "android" ? "visible-password" : "url"}
                 returnKeyType="next"
                 submitBehavior="submit"
                 onSubmitEditing={() => userInput.current?.focus()}
-                style={styles.input}
+                className={INPUT}
               />
             </Field>
             <Field label="Your username on it">
-              <TextInput
+              <Input
                 ref={userInput}
                 value={user}
                 onChangeText={setUser}
                 placeholder="the name you sign in with"
-                placeholderTextColor={C.idle}
+                placeholderTextColorClassName="accent-idle"
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType={Platform.OS === "android" ? "visible-password" : "default"}
                 returnKeyType="go"
                 onSubmitEditing={() => void connect()}
-                style={styles.input}
+                className={INPUT}
               />
             </Field>
             <Field label="SSH port">
-              <TextInput value={port} onChangeText={setPort} keyboardType="number-pad" returnKeyType="go" onSubmitEditing={() => void connect()} style={[styles.input, { width: 120 }]} />
+              <Input value={port} onChangeText={setPort} keyboardType="number-pad" returnKeyType="go" onSubmitEditing={() => void connect()} className={cn(INPUT, "w-[120px]")} />
             </Field>
             {error && <ErrorBox text={error} />}
-            <Button label="Connect" busy={busy} onPress={() => void connect()} />
+            <Action label="Connect" busy={busy} onPress={() => void connect()} />
           </>
         )}
 
         {step === "trust" && conn && (
           <>
-            <Text style={styles.title}>Is this your computer?</Text>
-            <Text style={styles.body}>
-              <Text style={styles.code}>{t.address}</Text> answered with this host key:
-            </Text>
-            <View style={styles.keyCard}>
-              <ShieldCheck size={20} color={C.accent} />
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.keyType}>{conn.keyType}</Text>
-                <Text style={styles.fingerprint} selectable>
+            <Title>Is this your computer?</Title>
+            <Body>
+              <Code>{t.address}</Code> answered with this host key:
+            </Body>
+            <View className="flex-row items-start gap-3 rounded-xl border border-border-strong bg-card p-4">
+              <Icon as={ShieldCheck} size={20} className="text-brand" />
+              <View className="flex-1 gap-1">
+                <Text className="font-medium text-xs uppercase tracking-[0.6px] text-faint">{conn.keyType}</Text>
+                <Text className="font-mono text-sm leading-[21px]" selectable>
                   {conn.hostKey}
                 </Text>
               </View>
             </View>
-            <Text style={styles.body}>To compare, run this on the computer:</Text>
+            <Body>To compare, run this on the computer:</Body>
             <Command text={`ssh-keygen -lf /etc/ssh/ssh_host_${keyFile(conn.keyType)}_key.pub`} onCopy={copy} />
-            <Text style={styles.note}>Corral remembers this key and won't connect if it ever changes.</Text>
+            <Note>Corral remembers this key and won't connect if it ever changes.</Note>
             {error && <ErrorBox text={error} />}
-            <Button label="Trust and continue" busy={busy} onPress={() => void trusted()} />
+            <Action label="Trust and continue" busy={busy} onPress={() => void trusted()} />
           </>
         )}
 
         {step === "signin" && conn && (
           <>
-            <Text style={styles.title}>Sign in once</Text>
-            <Text style={styles.body}>
-              Enter the password for <Text style={styles.code}>{t.user}</Text> on <Text style={styles.code}>{t.address}</Text>. Corral uses it once to add this device's
-              key to <Text style={styles.code}>~/.ssh/authorized_keys</Text>, and signs in with the key from then on. The password isn't stored.
-            </Text>
+            <Title>Sign in once</Title>
+            <Body>
+              Enter the password for <Code>{t.user}</Code> on <Code>{t.address}</Code>. Corral uses it once to add this device's key to <Code>~/.ssh/authorized_keys</Code>,
+              and signs in with the key from then on. The password isn't stored.
+            </Body>
             <Field label="Password">
-              <TextInput
+              <Input
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -343,32 +347,32 @@ export default function AddComputer() {
                 autoCorrect={false}
                 returnKeyType="go"
                 onSubmitEditing={() => void signInWithPassword()}
-                style={styles.input}
+                className={INPUT}
               />
             </Field>
             {error && <ErrorBox text={error} />}
-            <Button label="Sign in and add the key" busy={busy && !manualKey} onPress={() => void signInWithPassword()} />
+            <Action label="Sign in and add the key" busy={busy && !manualKey} onPress={() => void signInWithPassword()} />
 
-            <Pressable onPress={() => setManualKey(!manualKey)} style={styles.disclosure}>
-              <KeyRound size={16} color={C.muted} />
-              <Text style={styles.disclosureText}>{manualKey ? "Hide" : "No password sign-in? Add the key yourself"}</Text>
-            </Pressable>
+            <Button variant="ghost" onPress={() => setManualKey(!manualKey)} className="gap-2">
+              <Icon as={KeyRound} size={16} className="text-muted-foreground" />
+              <Text className="font-medium text-sm text-muted-foreground">{manualKey ? "Hide" : "No password sign-in? Add the key yourself"}</Text>
+            </Button>
             {manualKey && publicKey && (
-              <View style={styles.manual}>
-                <Text style={styles.itemBody}>On the computer, as {t.user}, run:</Text>
+              <Card className="gap-3 rounded-xl border-border bg-card p-4">
+                <Small>On the computer, as {t.user}, run:</Small>
                 <Command text={`mkdir -p -m 700 ~/.ssh && echo '${publicKey}' >> ~/.ssh/authorized_keys`} onCopy={copy} />
-                <Button label="I've added it" busy={busy} secondary onPress={() => void run(() => withKey())} />
-              </View>
+                <Action label="I've added it" busy={busy} secondary onPress={() => void run(() => withKey())} />
+              </Card>
             )}
           </>
         )}
 
         {step === "check" && check && (
           <>
-            <Text style={styles.title}>{ready ? "All set" : "Almost there"}</Text>
-            <Text style={styles.body}>
-              Signed in to <Text style={styles.code}>{check.hostname || t.address}</Text> as <Text style={styles.code}>{check.user || t.user}</Text> with this device's key.
-            </Text>
+            <Title>{ready ? "All set" : "Almost there"}</Title>
+            <Body>
+              Signed in to <Code>{check.hostname || t.address}</Code> as <Code>{check.user || t.user}</Code> with this device's key.
+            </Body>
             <CheckRow ok={!!check.mosh} label="mosh" detail={check.mosh ?? "not installed"}>
               {!check.mosh && <Command text={MOSH_INSTALL[os]} onCopy={copy} />}
             </CheckRow>
@@ -378,34 +382,41 @@ export default function AddComputer() {
               label="herdr running"
               detail={check.sessions.some((s) => s.running) ? `${check.sessions.filter((s) => s.running).length} running` : "no session running"}
             >
-              {!!check.herdr && !check.sessions.some((s) => s.running) && <Text style={styles.itemBody}>Start herdr on the computer, then check again.</Text>}
+              {!!check.herdr && !check.sessions.some((s) => s.running) && <Small>Start herdr on the computer, then check again.</Small>}
             </CheckRow>
 
             {ready && (
               <>
                 <Field label="herdr session">
-                  <View style={styles.sessionList}>
+                  <View className="flex-row flex-wrap gap-2">
                     {check.sessions.map((s) => (
-                      <Chip key={s.name} label={s.default && s.name !== "default" ? `${s.name} (default)` : s.name} selected={session === s.name} disabled={!s.running} onPress={() => setSession(s.name)} height={36} />
+                      <Chip
+                        key={s.name}
+                        label={s.default && s.name !== "default" ? `${s.name} (default)` : s.name}
+                        selected={session === s.name}
+                        disabled={!s.running}
+                        onPress={() => setSession(s.name)}
+                        height={36}
+                      />
                     ))}
                   </View>
                 </Field>
                 <Field label="Name in Corral">
-                  <TextInput value={name} onChangeText={setName} autoCorrect={false} returnKeyType="done" style={[styles.input, { fontFamily: F.regular }]} />
+                  <Input value={name} onChangeText={setName} autoCorrect={false} returnKeyType="done" className={cn(INPUT, "font-normal")} />
                 </Field>
               </>
             )}
             {error && <ErrorBox text={error} />}
             {ready ? (
-              <Button label={`Open ${name.trim() || check.hostname}`} busy={busy} onPress={() => void finish()} />
+              <Action label={`Open ${name.trim() || check.hostname}`} busy={busy} onPress={() => void finish()} />
             ) : (
-              <Button label="Check again" busy={busy} onPress={() => void run(() => checkWith(conn!))} />
+              <Action label="Check again" busy={busy} onPress={() => void run(() => checkWith(conn!))} />
             )}
           </>
         )}
       </ScrollView>
       {/* Text scrolling up shouldn't run under the status bar. */}
-      <View pointerEvents="none" style={[styles.statusShade, { height: insets.top }]} />
+      <View pointerEvents="none" className="absolute left-0 right-0 top-0 bg-background" style={{ height: insets.top }} />
     </KeyboardAvoidingView>
   );
 }
@@ -413,15 +424,23 @@ export default function AddComputer() {
 /** ssh-keygen's file name for a host key type. */
 const keyFile = (type: string): string => (type.includes("ed25519") ? "ed25519" : type.includes("ecdsa") ? "ecdsa" : "rsa");
 
+const INPUT = "h-[52px] rounded-lg border-border-strong bg-card px-4 font-mono text-base";
+
+const Title = ({ children }: { children: ReactNode }) => <Text className="mt-1 font-bold text-[28px]">{children}</Text>;
+const Body = ({ children }: { children: ReactNode }) => <Text className="text-[15px] leading-[22px] text-muted-foreground">{children}</Text>;
+const Small = ({ children }: { children: ReactNode }) => <Text className="text-sm leading-5 text-muted-foreground">{children}</Text>;
+const Note = ({ children }: { children: ReactNode }) => <Text className="text-[13px] leading-[19px] text-faint">{children}</Text>;
+const Code = ({ children }: { children: ReactNode }) => <Text className="font-mono text-brand">{children}</Text>;
+
 function Progress({ index }: { index: number }) {
   return (
-    <View style={styles.progress}>
-      <View style={styles.progressBars}>
+    <View className="mt-1 gap-2">
+      <View className="flex-row gap-1.5">
         {STEPS.map((s, i) => (
-          <View key={s.id} style={[styles.progressBar, i <= index && styles.progressDone]} />
+          <View key={s.id} className={cn("h-1 flex-1 rounded-sm", i <= index ? "bg-brand" : "bg-border")} />
         ))}
       </View>
-      <Text style={styles.progressText}>
+      <Text className="font-medium text-xs uppercase tracking-[0.6px] text-faint">
         Step {index + 1} of {STEPS.length} · {STEPS[index].label}
       </Text>
     </View>
@@ -430,106 +449,80 @@ function Progress({ index }: { index: number }) {
 
 function Item(props: { n: number; title: string; children: ReactNode }) {
   return (
-    <View style={styles.item}>
-      <View style={styles.itemNumber}>
-        <Text style={styles.itemNumberText}>{props.n}</Text>
+    <Card className="flex-row gap-3.5 rounded-xl border-border bg-card p-4 py-4">
+      <View className="size-7 items-center justify-center rounded-full bg-accent">
+        <Text className="font-semibold text-sm text-brand">{props.n}</Text>
       </View>
-      <View style={{ flex: 1, gap: 8 }}>
-        <Text style={styles.itemTitle}>{props.title}</Text>
+      <View className="flex-1 gap-2">
+        <Text className="font-semibold text-base">{props.title}</Text>
         {props.children}
       </View>
-    </View>
+    </Card>
   );
 }
 
 function CheckRow(props: { ok: boolean; label: string; detail: string; children?: ReactNode }) {
   return (
-    <View style={styles.item}>
-      <View style={[styles.checkIcon, { backgroundColor: props.ok ? C.doneBg : C.dangerBg }]}>{props.ok ? <Check size={16} color={C.done} /> : <X size={16} color={C.danger} />}</View>
-      <View style={{ flex: 1, gap: 6 }}>
-        <Text style={styles.itemTitle}>{props.label}</Text>
-        <Text style={styles.checkDetail} numberOfLines={2}>
+    <Card className="flex-row gap-3.5 rounded-xl border-border bg-card p-4 py-4">
+      <View className={cn("size-7 items-center justify-center rounded-full", props.ok ? "bg-success-muted" : "bg-destructive-muted")}>
+        <Icon as={props.ok ? Check : X} size={16} className={props.ok ? "text-success" : "text-destructive"} />
+      </View>
+      <View className="flex-1 gap-1.5">
+        <Text className="font-semibold text-base">{props.label}</Text>
+        <Text className="font-mono text-xs text-faint" numberOfLines={2}>
           {props.detail}
         </Text>
         {props.children}
       </View>
-    </View>
+    </Card>
   );
 }
 
 function Command({ text, onCopy }: { text: string; onCopy: (t: string) => void }) {
   return (
-    <Pressable onPress={() => onCopy(text)} style={({ pressed }) => [styles.command, pressed && { opacity: 0.7 }]} accessibilityLabel={`Copy ${text}`}>
-      <Text style={styles.commandText} selectable>
+    <Pressable
+      onPress={() => onCopy(text)}
+      accessibilityLabel={`Copy ${text}`}
+      className="flex-row items-center gap-2.5 rounded-md border border-terminal-border bg-terminal px-3 py-2.5 active:opacity-70"
+    >
+      <Text className="flex-1 font-mono text-[13px] leading-[19px]" selectable>
         {text}
       </Text>
-      <Copy size={15} color={C.muted} />
+      <Icon as={Copy} size={15} className="text-muted-foreground" />
     </Pressable>
   );
 }
 
 function Field(props: { label: string; children: ReactNode }) {
   return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{props.label}</Text>
+    <View className="gap-2">
+      <Label className="font-medium text-[13px] text-muted-foreground">{props.label}</Label>
       {props.children}
     </View>
   );
 }
 
 function ErrorBox({ text }: { text: string }) {
-  return <Text style={styles.error}>{text}</Text>;
-}
-
-function Button(props: { label: string; onPress: () => void; busy?: boolean; secondary?: boolean }) {
   return (
-    <Pressable
-      onPress={props.onPress}
-      disabled={props.busy}
-      style={({ pressed }) => [styles.button, props.secondary && styles.buttonSecondary, (pressed || props.busy) && { opacity: 0.8 }]}
-    >
-      {props.busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{props.label}</Text>}
-    </Pressable>
+    <Alert variant="destructive" icon={CircleAlert} className="rounded-lg border-destructive-border bg-destructive-muted">
+      <AlertDescription className="text-sm leading-5">{text}</AlertDescription>
+    </Alert>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.ground },
-  statusShade: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: C.ground },
-  content: { gap: 16 },
-  header: { flexDirection: "row", alignItems: "center", gap: 12 },
-  headerTitle: { fontFamily: F.medium, fontSize: 15, color: C.muted },
-  progress: { gap: 8, marginTop: 4 },
-  progressBars: { flexDirection: "row", gap: 6 },
-  progressBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.line },
-  progressDone: { backgroundColor: C.accent },
-  progressText: { fontFamily: F.medium, fontSize: 12, letterSpacing: 0.6, color: C.faint, textTransform: "uppercase" },
-  title: { fontFamily: F.bold, fontSize: 28, color: C.text, marginTop: 4 },
-  body: { fontFamily: F.regular, fontSize: 15, lineHeight: 22, color: C.muted },
-  code: { fontFamily: F.mono, color: C.accent },
-  osRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  item: { flexDirection: "row", gap: 14, backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: R.xl, padding: 16 },
-  itemNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: C.accentTint, alignItems: "center", justifyContent: "center" },
-  itemNumberText: { fontFamily: F.semibold, fontSize: 14, color: C.accent },
-  itemTitle: { fontFamily: F.semibold, fontSize: 16, color: C.text },
-  itemBody: { fontFamily: F.regular, fontSize: 14, lineHeight: 20, color: C.muted },
-  checkIcon: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  checkDetail: { fontFamily: F.mono, fontSize: 12, color: C.faint },
-  command: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: C.terminal, borderColor: C.terminalLine, borderWidth: 1, borderRadius: R.md, paddingHorizontal: 12, paddingVertical: 10 },
-  commandText: { flex: 1, fontFamily: F.mono, fontSize: 13, lineHeight: 19, color: C.text },
-  keyCard: { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: C.surface, borderColor: C.line2, borderWidth: 1, borderRadius: R.xl, padding: 16 },
-  keyType: { fontFamily: F.medium, fontSize: 12, letterSpacing: 0.6, color: C.faint, textTransform: "uppercase" },
-  fingerprint: { fontFamily: F.mono, fontSize: 14, lineHeight: 21, color: C.text },
-  field: { gap: 8 },
-  label: { fontFamily: F.medium, fontSize: 13, color: C.muted },
-  input: { height: 52, borderRadius: R.lg, borderWidth: 1, borderColor: C.line2, backgroundColor: C.surface, paddingHorizontal: 16, color: C.text, fontFamily: F.mono, fontSize: 16 },
-  sessionList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  disclosure: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 6 },
-  disclosureText: { fontFamily: F.medium, fontSize: 14, color: C.muted },
-  manual: { gap: 12, backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: R.xl, padding: 16 },
-  error: { fontFamily: F.regular, fontSize: 14, lineHeight: 20, color: C.danger, backgroundColor: C.dangerBg, borderColor: C.dangerLine, borderWidth: 1, borderRadius: R.lg, padding: 12 },
-  button: { height: 54, borderRadius: R.xl, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center", marginTop: 4 },
-  buttonSecondary: { backgroundColor: C.surface2, borderColor: C.line2, borderWidth: 1 },
-  buttonText: { fontFamily: F.semibold, fontSize: 17, color: "#fff" },
-  note: { fontFamily: F.regular, fontSize: 13, lineHeight: 19, color: C.faint },
-});
+function Action(props: { label: string; onPress: () => void; busy?: boolean; secondary?: boolean }) {
+  return (
+    <Button
+      variant={props.secondary ? "secondary" : "default"}
+      onPress={props.onPress}
+      disabled={props.busy}
+      className={cn("mt-1 h-[54px] rounded-xl", props.secondary && "border border-border-strong", props.busy && "opacity-80")}
+    >
+      {props.busy ? (
+        <ActivityIndicator colorClassName={props.secondary ? "accent-foreground" : "accent-primary-foreground"} />
+      ) : (
+        <Text className={cn("font-semibold text-[17px]", props.secondary ? "text-foreground" : "text-primary-foreground")}>{props.label}</Text>
+      )}
+    </Button>
+  );
+}

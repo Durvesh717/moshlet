@@ -3,14 +3,16 @@ import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, View } from "react-native";
 import { Drawer } from "react-native-drawer-layout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useCSSVariable } from "uniwind";
+import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
 import { activeSession, closeHost } from "../lib/session";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
-import { C, F, R } from "../theme";
 import { confirm } from "../ui/Confirm";
 import { Chip, StatusGlyph } from "../ui/kit";
 import { Composer, KeyBar } from "../workspace/KeyBar";
@@ -22,6 +24,7 @@ export default function WorkspaceScreen() {
   const session = activeSession();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const scrim = useCSSVariable("--color-scrim") as string;
   // Only what this screen shows: the link's latency changes many times a second, so the two small
   // indicators that display it read it themselves rather than re-rendering the whole workspace.
   const s = useApp(
@@ -115,7 +118,7 @@ export default function WorkspaceScreen() {
       onClose={() => setDrawerOpen(false)}
       swipeEnabled={drawerOpen}
       drawerStyle={{ backgroundColor: "transparent", width: 320 }}
-      overlayStyle={{ backgroundColor: C.scrim }}
+      overlayStyle={{ backgroundColor: scrim }}
       renderDrawerContent={() => (
         <Sidebar
           hostName={session.host.name}
@@ -154,7 +157,7 @@ export default function WorkspaceScreen() {
       {/* Padding, not height: resizing itself makes the view re-measure against the keyboard and
           flip between sizes on some Android versions. It owns the bottom padding, so the
           navigation bar's inset is a spacer below. */}
-      <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]} behavior="padding">
+      <KeyboardAvoidingView className="flex-1 bg-background" style={{ paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }} behavior="padding">
         <TopBar
           workspace={ws}
           tab={tab}
@@ -176,7 +179,7 @@ export default function WorkspaceScreen() {
           onPaneMap={() => paneMap.current?.present()}
         />
 
-        <View style={styles.terminal}>
+        <View className="mx-1.5 flex-1 overflow-hidden rounded-lg border border-terminal-border bg-terminal px-1 py-1.5">
           <TerminalView
             ref={term}
             client={s.terminal}
@@ -209,11 +212,9 @@ export default function WorkspaceScreen() {
               label="Needs approval"
               onPress={() => approval.current?.present()}
               height={34}
-              background={C.surface}
-              border={C.blocked}
-              color={C.blocked}
+              tone="warning"
               leading={<StatusGlyph status="blocked" size={12} />}
-              style={styles.approvalPill}
+              className="absolute bottom-2.5 left-2.5"
             />
           )}
           {(s.historyMode || scrolledUp) && (
@@ -221,11 +222,9 @@ export default function WorkspaceScreen() {
               label="Live"
               onPress={() => (s.historyMode ? session.closeHistory() : term.current?.wheelToBottom())}
               height={34}
-              background={C.surface}
-              border={C.accent}
-              color={C.accent}
-              leading={<ChevronDown size={15} color={C.accent} />}
-              style={styles.livePill}
+              tone="brand"
+              icon={ChevronDown}
+              className="absolute bottom-2.5 right-2.5"
             />
           )}
           <Overlay
@@ -346,22 +345,22 @@ function Overlay(props: {
   else if (props.neverHeard) message = "mosh-server started but nothing comes back over UDP. A firewall on the computer may be blocking UDP 60000-61000 on its Tailscale interface.";
   if (!message && (props.attaching || props.conn.kind === "connecting")) {
     return (
-      <View style={styles.overlay} pointerEvents="none">
-        <ActivityIndicator color={C.accent} size="large" />
+      <View className={OVERLAY} pointerEvents="none">
+        <ActivityIndicator colorClassName="accent-brand" size="large" />
       </View>
     );
   }
   if (!message) return null;
   return (
-    <View style={[styles.overlay, styles.overlayDim]}>
-      <Text style={styles.overlayText}>{message}</Text>
+    <View className={cn(OVERLAY, "bg-dim")}>
+      <Text className="text-center text-[15px] leading-[22px]">{message}</Text>
       {props.conn.kind === "failed" && (
-        <View style={styles.overlayActions}>
+        <View className="flex-row gap-2.5">
           <Chip label={FIX_LABEL[props.conn.fix]} onPress={props.onFix} />
         </View>
       )}
       {props.conn.kind === "online" && (
-        <View style={styles.overlayActions}>
+        <View className="flex-row gap-2.5">
           {!props.noPane && <Chip label="Reattach" onPress={props.onRetry} />}
           <Chip label="Pick a pane" onPress={props.onPick} />
         </View>
@@ -372,13 +371,4 @@ function Overlay(props: {
 
 const FIX_LABEL = { unlock: "Unlock", trust: "Trust the new key…", setup: "Set up again", retry: "Try again" } as const;
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.ground },
-  terminal: { flex: 1, marginHorizontal: 6, borderRadius: R.lg, backgroundColor: C.terminal, borderWidth: 1, borderColor: C.terminalLine, overflow: "hidden", paddingHorizontal: 4, paddingVertical: 6 },
-  approvalPill: { position: "absolute", left: 10, bottom: 10 },
-  livePill: { position: "absolute", right: 10, bottom: 10 },
-  overlay: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", padding: 24, gap: 14 },
-  overlayDim: { backgroundColor: "rgba(8,6,12,0.85)" },
-  overlayText: { fontFamily: F.regular, fontSize: 15, lineHeight: 22, color: C.text, textAlign: "center" },
-  overlayActions: { flexDirection: "row", gap: 10 },
-});
+const OVERLAY = "absolute bottom-0 left-0 right-0 top-0 items-center justify-center gap-3.5 p-6";

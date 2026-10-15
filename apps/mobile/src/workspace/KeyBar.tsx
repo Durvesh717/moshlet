@@ -1,9 +1,11 @@
 import * as Speech from "expo-speech-recognition";
 import { Keyboard as KeyboardIcon, Mic, Pencil, Send, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { type TextInput, View } from "react-native";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@/components/ui/icon";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "../lib/store";
-import { C, F, R } from "../theme";
 import { IconButton, KeyCap, KeyLabel } from "../ui/kit";
 
 type Key = { label: string; bytes: string | null; desc: string };
@@ -51,7 +53,7 @@ export function KeyBar(props: {
 }) {
   const keys = props.typing ? TYPING : IDLE;
   return (
-    <View style={styles.row}>
+    <View className="flex-row gap-[5px] p-1.5">
       {keys.map((k) => {
         const active = (k.label === "ctrl" && props.ctrl) || (k.label === "alt" && props.alt);
         return (
@@ -72,10 +74,10 @@ export function KeyBar(props: {
       {!props.typing && (
         <>
           <KeyCap label="Keyboard" onPress={props.onKeyboard}>
-            <KeyboardIcon size={18} color={C.text} />
+            <Icon as={KeyboardIcon} size={18} className="text-foreground" />
           </KeyCap>
-          <KeyCap label="Write a prompt" onPress={props.onCompose} color={C.accentStrong} flex={1.3}>
-            <Pencil size={17} color="#fff" />
+          <KeyCap label="Write a prompt" onPress={props.onCompose} primary flex={1.3}>
+            <Icon as={Pencil} size={17} className="text-primary-foreground" />
           </KeyCap>
         </>
       )}
@@ -132,9 +134,9 @@ export function Composer(props: { placeholder: string; onSend(text: string): voi
   };
 
   return (
-    <View style={[styles.row, { alignItems: "flex-end" }]}>
+    <View className="flex-row items-end gap-[5px] p-1.5">
       <IconButton icon={X} label="Close" size={42} onPress={props.onClose} />
-      <TextInput
+      <Textarea
         ref={input}
         value={heard ? joinWords(text, heard) : text}
         onChangeText={(t) => {
@@ -142,42 +144,23 @@ export function Composer(props: { placeholder: string; onSend(text: string): voi
           setText(t);
         }}
         placeholder={props.placeholder}
-        placeholderTextColor={C.faint}
-        multiline
-        style={styles.input}
+        placeholderTextColorClassName="accent-faint"
+        numberOfLines={undefined}
+        textAlignVertical="center"
+        className="max-h-[140px] min-h-[42px] flex-1 rounded-[21px] border-border bg-card px-4 py-[11px] text-[15px] leading-5"
         onSubmitEditing={send}
         submitBehavior="blurAndSubmit"
         returnKeyType="send"
       />
       {text.trim() && !listening ? (
-        <Pressable accessibilityLabel="Send" onPress={send} style={({ pressed }) => [styles.send, pressed && { opacity: 0.8 }]}>
-          <Send size={19} color="#fff" />
-        </Pressable>
+        <Button accessibilityLabel="Send" onPress={send} size="icon" className="size-[42px] rounded-full active:opacity-80">
+          <Icon as={Send} size={19} className="text-primary-foreground" />
+        </Button>
       ) : (
-        <IconButton icon={Mic} label="Dictate" size={42} active={listening} background={C.surface2} border={C.line2} onPress={() => void dictate()} />
+        <IconButton icon={Mic} label="Dictate" size={42} active={listening} className="border-border-strong bg-secondary" onPress={() => void dictate()} />
       )}
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", gap: 5, padding: 6 },
-  input: {
-    flex: 1,
-    minHeight: 42,
-    maxHeight: 140,
-    borderRadius: 21,
-    backgroundColor: C.surface,
-    borderColor: C.line,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingTop: 11,
-    paddingBottom: 11,
-    color: C.text,
-    fontFamily: F.regular,
-    fontSize: 15,
-  },
-  send: { width: 42, height: 42, borderRadius: R.pill, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center" },
-});
 
 const joinWords = (a: string, b: string) => (a.trim() ? `${a.trimEnd()} ${b}` : b);

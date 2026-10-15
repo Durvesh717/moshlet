@@ -13,6 +13,7 @@
     "@corral/core": "*",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@rn-primitives/alert-dialog": "^1.5.2",
+    "@rn-primitives/dropdown-menu": "^1.5.2",
     "@rn-primitives/label": "^1.5.2",
     "@rn-primitives/portal": "^1.5.3",
     "@rn-primitives/progress": "^1.5.2",

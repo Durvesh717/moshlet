@@ -1,12 +1,18 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Check, ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScopedTheme, useUniwind } from "uniwind";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Icon } from "@/components/ui/icon";
+import { Text } from "@/components/ui/text";
+import { cn } from "@/lib/utils";
+import { setTheme, THEMES } from "../lib/appearance";
 import { hostLabel, saveHosts, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
 import { toast, useApp } from "../lib/store";
 import { unlock } from "../lib/unlock";
-import { C, F, R } from "../theme";
 import { confirm } from "../ui/Confirm";
 import { SectionLabel } from "../ui/kit";
 import { Logo } from "../ui/Logo";
@@ -43,70 +49,99 @@ export default function Hosts() {
   const sorted = [...hosts].sort((a, b) => (b.lastUsedAt ?? b.addedAt) - (a.lastUsedAt ?? a.addedAt));
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]}>
-      <View style={styles.brand}>
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerClassName="gap-3.5"
+      contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}
+    >
+      <View className="mb-[18px] flex-row items-center gap-4">
         <Logo size={56} />
         <View>
-          <Text style={styles.title}>Corral</Text>
-          <Text style={styles.subtitle}>your coding agents, in your pocket</Text>
+          <Text className="font-bold text-[30px]">Corral</Text>
+          <Text className="text-[15px] text-muted-foreground">your coding agents, in your pocket</Text>
         </View>
       </View>
 
       <SectionLabel>Computers</SectionLabel>
       {sorted.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No computers yet</Text>
-          <Text style={styles.emptyBody}>
-            Corral signs in to the computer running herdr over SSH and streams its panes over mosh. Nothing to install there: setup takes five short steps.
-          </Text>
-        </View>
+        <Card className="gap-2 rounded-xl border-border bg-card p-5 py-5">
+          <CardHeader className="gap-2 px-0">
+            <CardTitle className="font-semibold text-[17px]">No computers yet</CardTitle>
+            <CardDescription className="text-[15px] leading-[22px]">
+              Corral signs in to the computer running herdr over SSH and streams its panes over mosh. Nothing to install there: setup takes five short steps.
+            </CardDescription>
+          </CardHeader>
+        </Card>
       ) : (
         sorted.map((h) => (
-          <Pressable key={h.id} onPress={() => void open(h)} onLongPress={() => void forget(h)} style={({ pressed }) => [styles.card, pressed && { opacity: 0.8 }]}>
-            <View style={styles.cardIcon}>
-              <Monitor size={22} color={C.accent} />
+          <Pressable
+            key={h.id}
+            onPress={() => void open(h)}
+            onLongPress={() => void forget(h)}
+            className="flex-row items-center gap-3.5 rounded-xl border border-border-strong bg-card p-4 active:opacity-80"
+          >
+            <View className="size-11 items-center justify-center rounded-xl bg-secondary">
+              <Icon as={Monitor} size={22} className="text-brand" />
             </View>
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={styles.cardTitle}>{h.name}</Text>
-              <Text style={styles.cardSub} numberOfLines={1}>
+            <View className="flex-1 gap-[3px]">
+              <Text className="font-semibold text-lg">{h.name}</Text>
+              <Text className="font-mono text-xs text-faint" numberOfLines={1}>
                 {hostLabel(h)} · {h.session}
               </Text>
             </View>
-            <ChevronRight size={20} color={C.faint} />
+            <Icon as={ChevronRight} size={20} className="text-faint" />
           </Pressable>
         ))
       )}
 
-      <Pressable onPress={() => router.push("/add")} style={({ pressed }) => [styles.add, pressed && { opacity: 0.8 }]}>
-        <Plus size={20} color={C.text} />
-        <Text style={styles.addText}>Add a computer</Text>
-      </Pressable>
+      <Button variant="outline" onPress={() => router.push("/add")} className="h-14 rounded-xl border-dashed border-border-strong bg-transparent active:opacity-80">
+        <Icon as={Plus} size={20} className="text-foreground" />
+        <Text className="font-medium text-base text-foreground">Add a computer</Text>
+      </Button>
       {sorted.length > 0 && (
-        <View style={styles.hint}>
-          <Trash2 size={13} color={C.faint} />
-          <Text style={styles.hintText}>Long-press a computer to forget it.</Text>
+        <View className="flex-row items-center justify-center gap-1.5">
+          <Icon as={Trash2} size={13} className="text-faint" />
+          <Text className="text-[13px] text-faint">Long-press a computer to forget it.</Text>
         </View>
       )}
+
+      <View className="mt-4 gap-3.5">
+        <SectionLabel>Theme</SectionLabel>
+        <ThemePicker />
+      </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.ground },
-  content: { gap: 14 },
-  brand: { flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 18 },
-  title: { fontFamily: F.bold, fontSize: 30, color: C.text },
-  subtitle: { fontFamily: F.regular, fontSize: 15, color: C.muted },
-  empty: { backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: R.xl, padding: 20, gap: 8 },
-  emptyTitle: { fontFamily: F.semibold, fontSize: 17, color: C.text },
-  emptyBody: { fontFamily: F.regular, fontSize: 15, lineHeight: 22, color: C.muted },
-  code: { fontFamily: F.mono, color: C.accent },
-  card: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: C.surface, borderColor: C.line2, borderWidth: 1, borderRadius: R.xl, padding: 16 },
-  cardIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: C.surface2, alignItems: "center", justifyContent: "center" },
-  cardTitle: { fontFamily: F.semibold, fontSize: 18, color: C.text },
-  cardSub: { fontFamily: F.mono, fontSize: 12, color: C.faint },
-  add: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, height: 56, borderRadius: R.xl, borderWidth: 1, borderColor: C.line2, borderStyle: "dashed" },
-  addText: { fontFamily: F.medium, fontSize: 16, color: C.text },
-  hint: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  hintText: { fontFamily: F.regular, fontSize: 13, color: C.faint },
-});
+/** Each choice is drawn in its own theme, so it previews itself. */
+function ThemePicker() {
+  const { theme } = useUniwind();
+  return (
+    <View className="flex-row gap-2.5">
+      {THEMES.map((t) => {
+        const selected = theme === t.id;
+        return (
+          <ScopedTheme key={t.id} theme={t.id}>
+            <Pressable
+              accessibilityRole="radio"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${t.label} theme`}
+              onPress={() => setTheme(t.id)}
+              className={cn("flex-1 gap-2.5 rounded-xl bg-background p-3 active:opacity-80", selected ? "border-2 border-brand" : "border border-border-strong")}
+            >
+              <View className="h-9 flex-row items-end gap-1 rounded-md bg-terminal p-1.5">
+                <View className="h-2 flex-1 rounded-sm bg-primary" />
+                <View className="h-2 w-2 rounded-sm bg-success" />
+                <View className="h-2 w-2 rounded-sm bg-warning" />
+              </View>
+              <View className="flex-row items-center justify-between">
+                <Text className="font-medium text-[13px]">{t.label}</Text>
+                {selected && <Icon as={Check} size={14} className="text-brand" />}
+              </View>
+            </Pressable>
+          </ScopedTheme>
+        );
+      })}
+    </View>
+  );
+}
