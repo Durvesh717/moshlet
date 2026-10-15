@@ -9,9 +9,12 @@ import {
   Sealer,
   STALE_AFTER_MS,
   agentIn,
+  primaryPane,
+  tabsOf,
   type AttachResult,
   type HelloResult,
   type Link,
+  type Snapshot,
   type SplitDirection,
 } from "@corral/core";
 import { AppState, type AppStateStatus } from "react-native";
@@ -164,8 +167,10 @@ export class HostSession {
     }
     this.refreshing = true;
     try {
+      const before = get().snapshot;
       const snapshot = await this.herdr().snapshot();
       set({ snapshot });
+      this.followClosedPane(before, snapshot);
       await this.ensureWatch(snapshot.panes.map((p) => p.pane_id));
     } catch {
       // The reconnect loop handles a dead link; a failed poll isn't worth surfacing.
@@ -176,6 +181,21 @@ export class HostSession {
         this.refreshSoon();
       }
     }
+  }
+
+  /** When the open pane closes (from here or on the computer), move to its neighbour instead of a dead screen. */
+  private followClosedPane(before: Snapshot | null, after: Snapshot): void {
+    const current = get().paneId;
+    if (!current || after.panes.some((p) => p.pane_id === current)) return;
+    const gone = before?.panes.find((p) => p.pane_id === current);
+    if (!gone) return;
+    const next =
+      primaryPane(after, gone.tab_id) ??
+      tabsOf(after, gone.workspace_id)
+        .map((t) => primaryPane(after, t.tab_id))
+        .find((p) => p !== undefined) ??
+      after.panes[0];
+    if (next) this.openPane(next.pane_id);
   }
 
   /** herdr's agent-status events are per pane, so re-subscribe when the set of panes changes. */
