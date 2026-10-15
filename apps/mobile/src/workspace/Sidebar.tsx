@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ChevronsUpDown, LayoutGrid, Monitor, Plus, S
 import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { ConnState, LinkUi } from "../lib/store";
+import type { ConnState } from "../lib/store";
 import { C, F, R } from "../theme";
 import { Chip, SectionLabel, StatusGlyph, statusLabel } from "../ui/kit";
 import { LinkIndicator, shortCwd } from "./TopBar";
@@ -15,7 +15,6 @@ export function Sidebar(props: {
   snapshot: Snapshot | null;
   paneId: string | null;
   conn: ConnState;
-  link: LinkUi | null;
   onOpenPane(paneId: string): void;
   onOpenTab(tabId: string): void;
   onNewTab(workspaceId: string): void;
@@ -148,7 +147,7 @@ export function Sidebar(props: {
       </ScrollView>
 
       <View style={styles.footer}>
-        <LinkIndicator conn={props.conn} link={props.link} />
+        <LinkIndicator conn={props.conn} />
         <View style={{ flex: 1 }} />
         <Chip label="Computers" onPress={props.onHosts} height={40} leading={<Monitor size={16} color={C.text} />} />
       </View>

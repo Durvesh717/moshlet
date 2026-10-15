@@ -2,7 +2,7 @@ import { tabName, type Agent, type Pane, type Tab, type Workspace } from "@corra
 import { ChevronDown, History, LayoutGrid, Menu, Plus } from "lucide-react-native";
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { type ConnState, type LinkUi } from "../lib/store";
+import { useApp, type ConnState } from "../lib/store";
 import { C, F, R } from "../theme";
 import { Chip, IconButton, StatusGlyph } from "../ui/kit";
 
@@ -24,7 +24,6 @@ export function TopBar(props: {
   paneCount: number;
   blockedElsewhere: number;
   conn: ConnState;
-  link: LinkUi | null;
   historyMode: boolean;
   onMenu(): void;
   onOpenTab(tabId: string): void;
@@ -63,7 +62,7 @@ export function TopBar(props: {
           </Text>
         </View>
       </Pressable>
-      <LinkIndicator conn={props.conn} link={props.link} />
+      <LinkIndicator conn={props.conn} />
       <IconButton icon={History} label="History" size={36} active={props.historyMode} onPress={props.onHistory} />
       <Chip
         label={`${props.paneIndex}/${props.paneCount}`}
@@ -115,7 +114,9 @@ export function TopBar(props: {
   );
 }
 
-export function LinkIndicator({ conn, link }: { conn: ConnState; link: LinkUi | null }) {
+/** Reads the link itself: its latency changes often, and only this needs to redraw for it. */
+export function LinkIndicator({ conn }: { conn: ConnState }) {
+  const link = useApp((s) => s.link);
   let dot: string = C.idle;
   let label = "…";
   if (conn.kind === "reconnecting" || conn.kind === "connecting") {

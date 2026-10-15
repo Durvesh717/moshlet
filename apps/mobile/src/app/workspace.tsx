@@ -7,6 +7,7 @@ import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, StyleSh
 import { Drawer } from "react-native-drawer-layout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { activeSession, closeHost } from "../lib/session";
+import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
 import { C, F, R } from "../theme";
@@ -20,14 +21,32 @@ export default function WorkspaceScreen() {
   const session = activeSession();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const s = useApp();
+  // Only what this screen shows: the link's latency changes many times a second, so the two small
+  // indicators that display it read it themselves rather than re-rendering the whole workspace.
+  const s = useApp(
+    useShallow((st) => ({
+      session: st.session,
+      sessions: st.sessions,
+      snapshot: st.snapshot,
+      paneId: st.paneId,
+      conn: st.conn,
+      terminal: st.terminal,
+      historyMode: st.historyMode,
+      scrollback: st.scrollback,
+      fontSize: st.fontSize,
+      attaching: st.attaching,
+      attachError: st.attachError,
+      linkClosed: st.link?.closed ?? null,
+      linkNeverHeard: !!st.link?.neverHeard,
+    })),
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [composing, setComposing] = useState(false);
   const [ctrl, setCtrl] = useState(false);
   const [alt, setAlt] = useState(false);
   const [termFocused, setTermFocused] = useState(false);
   const [keyboardUp, setKeyboardUp] = useState(false);
-  const [liveNotches, setLiveNotches] = useState(0);
+  const [scrolledUp, setScrolledUp] = useState(false);
   const term = useRef<TerminalViewHandle>(null);
   const approval = useRef<BottomSheetModal>(null);
   const paneMap = useRef<BottomSheetModal>(null);
@@ -104,7 +123,6 @@ export default function WorkspaceScreen() {
           snapshot={snap}
           paneId={s.paneId}
           conn={conn}
-          link={s.link}
           onOpenPane={openPane}
           onOpenTab={(id) => {
             openTab(id);
@@ -145,7 +163,6 @@ export default function WorkspaceScreen() {
           paneCount={panesInTab.length}
           blockedElsewhere={blockedElsewhere}
           conn={conn}
-          link={s.link}
           historyMode={s.historyMode}
           onMenu={() => {
             Keyboard.dismiss();
@@ -180,7 +197,7 @@ export default function WorkspaceScreen() {
             onLeaveHistory={() => session.closeHistory()}
             onRemoteScroll={(n) => {
               session.remoteNotches = n;
-              setLiveNotches(n);
+              setScrolledUp(n > 0);
             }}
             onTouchStart={() => session.nudge()}
             onFocusChange={setTermFocused}
@@ -197,7 +214,7 @@ export default function WorkspaceScreen() {
               style={styles.approvalPill}
             />
           )}
-          {(s.historyMode || liveNotches > 0) && (
+          {(s.historyMode || scrolledUp) && (
             <Chip
               label="Live"
               onPress={() => (s.historyMode ? session.closeHistory() : term.current?.wheelToBottom())}
@@ -214,8 +231,8 @@ export default function WorkspaceScreen() {
             attaching={s.attaching}
             error={s.attachError}
             noPane={!pane && !!snap}
-            closed={s.link?.closed ?? null}
-            neverHeard={!!s.link?.neverHeard}
+            closed={s.linkClosed}
+            neverHeard={s.linkNeverHeard}
             onRetry={() => session.retryAttach()}
             onPick={() => setDrawerOpen(true)}
           />
