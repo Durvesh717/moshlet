@@ -308,5 +308,128 @@
       --color-logo-chip: #fabd2f;
       --color-logo-mark: #fbf1c7;
     }
+
+    /* Kanagawa (Wave): crystal blue accent, and the official terminal colors. */
+    @variant kanagawa {
+      --color-background: #16161d;
+      --color-foreground: #dcd7ba;
+      --color-card: #1f1f28;
+      --color-card-foreground: #dcd7ba;
+      --color-popover: #1f1f28;
+      --color-popover-foreground: #dcd7ba;
+      --color-primary: #7e9cd8;
+      --color-primary-foreground: #16161d;
+      --color-secondary: #2a2a37;
+      --color-secondary-foreground: #dcd7ba;
+      --color-muted: #2a2a37;
+      --color-muted-foreground: #c8c093;
+      --color-accent: #7e9cd81f;
+      --color-accent-foreground: #dcd7ba;
+      --color-destructive: #e46876;
+      --color-destructive-muted: #2f2028;
+      --color-destructive-border: #542f38;
+      --color-border: #2a2a37;
+      --color-border-strong: #363646;
+      --color-input: #363646;
+      --color-ring: #7e9cd8;
+      --color-brand: #7e9cd8;
+      --color-faint: #727169;
+      --color-idle: #54546d;
+      --color-warning: #e6c384;
+      --color-warning-muted: #2f2b29;
+      --color-success: #98bb6c;
+      --color-success-muted: #262a27;
+      --color-sidebar: #1f1f28;
+      --color-terminal: #1f1f28;
+      --color-terminal-border: #2a2a37;
+      --color-scrim: #16161db8;
+      --color-dim: #16161dd9;
+
+      --color-term-fg: #dcd7ba;
+      --color-term-cursor: #c8c093;
+      --color-term-0: #16161d;
+      --color-term-1: #c34043;
+      --color-term-2: #76946a;
+      --color-term-3: #c0a36e;
+      --color-term-4: #7e9cd8;
+      --color-term-5: #957fb8;
+      --color-term-6: #6a9589;
+      --color-term-7: #c8c093;
+      --color-term-8: #727169;
+      --color-term-9: #e82424;
+      --color-term-10: #98bb6c;
+      --color-term-11: #e6c384;
+      --color-term-12: #7fb4ca;
+      --color-term-13: #938aa9;
+      --color-term-14: #7aa89f;
+      --color-term-15: #dcd7ba;
+      --color-logo-from: #7e9cd8;
+      --color-logo-to: #2d4f67;
+      --color-logo-chip: #e6c384;
+      --color-logo-mark: #dcd7ba;
+    }
+
+    /*
+     * Black & White: pure black, white and grays. The terminal's 16 colors become distinct grays;
+     * truecolor output (diff backgrounds and the like) keeps its own colors.
+     */
+    @variant mono {
+      --color-background: #000000;
+      --color-foreground: #ffffff;
+      --color-card: #0a0a0a;
+      --color-card-foreground: #ffffff;
+      --color-popover: #0a0a0a;
+      --color-popover-foreground: #ffffff;
+      --color-primary: #ffffff;
+      --color-primary-foreground: #000000;
+      --color-secondary: #171717;
+      --color-secondary-foreground: #ffffff;
+      --color-muted: #171717;
+      --color-muted-foreground: #a3a3a3;
+      --color-accent: #ffffff1a;
+      --color-accent-foreground: #ffffff;
+      --color-destructive: #e5e5e5;
+      --color-destructive-muted: #1a1a1a;
+      --color-destructive-border: #525252;
+      --color-border: #262626;
+      --color-border-strong: #404040;
+      --color-input: #404040;
+      --color-ring: #ffffff;
+      --color-brand: #ffffff;
+      --color-faint: #737373;
+      --color-idle: #525252;
+      --color-warning: #ffffff;
+      --color-warning-muted: #262626;
+      --color-success: #d4d4d4;
+      --color-success-muted: #1a1a1a;
+      --color-sidebar: #0a0a0a;
+      --color-terminal: #000000;
+      --color-terminal-border: #262626;
+      --color-scrim: #000000b8;
+      --color-dim: #000000d9;
+
+      --color-term-fg: #e5e5e5;
+      --color-term-cursor: #ffffff;
+      --color-term-0: #0a0a0a;
+      --color-term-1: #8c8c8c;
+      --color-term-2: #b4b4b4;
+      --color-term-3: #d2d2d2;
+      --color-term-4: #787878;
+      --color-term-5: #a0a0a0;
+      --color-term-6: #c3c3c3;
+      --color-term-7: #dcdcdc;
+      --color-term-8: #5a5a5a;
+      --color-term-9: #a6a6a6;
+      --color-term-10: #cacaca;
+      --color-term-11: #ebebeb;
+      --color-term-12: #949494;
+      --color-term-13: #b9b9b9;
+      --color-term-14: #d7d7d7;
+      --color-term-15: #ffffff;
+      --color-logo-from: #ffffff;
+      --color-logo-to: #bdbdbd;
+      --color-logo-chip: #525252;
+      --color-logo-mark: #000000;
+    }
   }
 }

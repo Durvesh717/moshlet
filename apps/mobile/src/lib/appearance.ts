@@ -4,9 +4,11 @@ import { Uniwind } from "uniwind";
 
 /** The themes in global.css. Base is Uniwind's "dark" (the app has no light theme). */
 export const THEMES = [
-  { id: "dark", label: "Base" },
-  { id: "catppuccin", label: "Catppuccin" },
-  { id: "gruvbox", label: "Gruvbox" },
+  { id: "dark", label: "Base", note: "Purple on near-black" },
+  { id: "catppuccin", label: "Catppuccin", note: "Mocha, with mauve" },
+  { id: "gruvbox", label: "Gruvbox", note: "Dark, with orange" },
+  { id: "kanagawa", label: "Kanagawa", note: "Wave, with crystal blue" },
+  { id: "mono", label: "Black & White", note: "Pure black, white and grays" },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]["id"];

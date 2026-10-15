@@ -7,5 +7,5 @@ const config = getDefaultConfig(__dirname);
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
   dtsFile: "./src/uniwind-types.d.ts",
-  extraThemes: ["catppuccin", "gruvbox"],
+  extraThemes: ["catppuccin", "gruvbox", "kanagawa", "mono"],
 });
