@@ -11,7 +11,7 @@ import {
 } from "@shopify/react-native-skia";
 import { Platform } from "react-native";
 import { drawBox, isBoxChar } from "./boxDrawing";
-import { CURSOR, DEFAULT_BG, DEFAULT_FG, resolveColor } from "./palette";
+import { resolveColor, type Palette } from "./palette";
 
 export interface TerminalFonts {
   regular: SkTypeface;
@@ -80,12 +80,15 @@ export class Renderer {
   private readonly glyphKind = new Map<string, number>();
   private readonly paragraphs = new Map<string, SkParagraph>();
   private readonly scaled = new Map<string, SkFont>();
-  private backdrop = DEFAULT_BG;
+  private palette: Palette;
+  private backdrop: number;
   /** Recorded rows by content, so scrolling re-places rows it has drawn instead of drawing them again. */
   private readonly rowCache = new Map<string, SkPicture>();
   private readonly styleIds = new Map<Style, number>();
 
-  constructor(fonts: TerminalFonts, fontSize: number, pixelRatio: number) {
+  constructor(fonts: TerminalFonts, fontSize: number, pixelRatio: number, palette: Palette) {
+    this.palette = palette;
+    this.backdrop = palette.bg;
     this.fonts = fonts;
     this.pixelRatio = pixelRatio;
     this.paint.setAntiAlias(true);
@@ -112,6 +115,13 @@ export class Renderer {
     this.clearRows();
   }
 
+  /** A new theme: recorded rows carry the old colors, so they go. */
+  setPalette(palette: Palette): void {
+    if (palette === this.palette) return;
+    this.palette = palette;
+    this.clearRows();
+  }
+
   private clearRows(): void {
     for (const pic of this.rowCache.values()) pic.dispose();
     this.rowCache.clear();
@@ -130,7 +140,7 @@ export class Renderer {
 
   private draw(canvas: SkCanvas, f: Frame): void {
     const s = f.screen;
-    canvas.drawColor(this.color(DEFAULT_BG));
+    canvas.drawColor(this.color(this.palette.bg));
     const reverse = s.reverseVideo;
     this.backdrop = this.findBackdrop(s, reverse);
     const ox = (f.width - s.cols * this.cellW) / 2;
@@ -190,12 +200,12 @@ export class Renderer {
     const s = f.screen;
     if (!s.cursorVisible || s.cursorX >= drawCols || s.cursorY >= s.rows || cy <= -this.cellH || cy >= f.height) return;
     const cx = ox + s.cursorX * this.cellW;
-    this.fill.setColor(this.color(CURSOR));
+    this.fill.setColor(this.color(this.palette.cursor));
     if (f.focused) {
       canvas.drawRect(Skia.XYWHRect(cx, cy, this.cellW, this.cellH), this.fill);
       const cell = s.lines[s.cursorY][s.cursorX];
       if (!isBlank(cell) && cell.width !== 0 && cell.text.length === 1 && cell.text.charCodeAt(0) < 0x7f) {
-        this.paint.setColor(this.color(DEFAULT_BG));
+        this.paint.setColor(this.color(this.palette.bg));
         canvas.drawText(cell.text, cx, cy + this.baseline, this.paint, has(cell.style, Attr.BOLD) ? this.mainBold : this.main);
       }
     } else {
@@ -210,7 +220,7 @@ export class Renderer {
    */
   private findBackdrop(s: Screen, reverse: boolean): number {
     const counts = new Map<number, number>();
-    let best = DEFAULT_BG;
+    let best = this.palette.bg;
     let bestCount = 0;
     for (let y = 0; y < s.rows; y++) {
       for (const c of s.lines[y]) {
@@ -223,7 +233,7 @@ export class Renderer {
         }
       }
     }
-    return bestCount * 2 > s.rows * s.cols ? best : DEFAULT_BG;
+    return bestCount * 2 > s.rows * s.cols ? best : this.palette.bg;
   }
 
   /**
@@ -274,7 +284,7 @@ export class Renderer {
       const bg = this.background(styleAt(line, x), reverse);
       let end = x + 1;
       while (end < n && this.background(styleAt(line, end), reverse) === bg) end++;
-      if (bg !== DEFAULT_BG) {
+      if (bg !== this.palette.bg) {
         this.fill.setColor(this.color(bg));
         canvas.drawRect(Skia.XYWHRect(this.snap(ox + x * cw), top, this.snap(ox + end * cw) - this.snap(ox + x * cw), this.cellH), this.fill);
       }
@@ -424,19 +434,19 @@ export class Renderer {
 
   private foreground(style: Style, reverse: boolean): number {
     const inverse = has(style, Attr.INVERSE) !== reverse;
-    const fg = inverse ? resolveColor(style.bg, DEFAULT_BG) : resolveColor(style.fg, DEFAULT_FG);
+    const fg = inverse ? resolveColor(this.palette, style.bg, this.palette.bg) : resolveColor(this.palette, style.fg, this.palette.fg);
     // Glyphs drawn in the backdrop color (e.g. powerline caps) blend into our ground too.
-    return fg === this.backdrop ? DEFAULT_BG : fg;
+    return fg === this.backdrop ? this.palette.bg : fg;
   }
 
   private background(style: Style, reverse: boolean): number {
     const bg = this.rawBackground(style, reverse);
-    return bg === this.backdrop ? DEFAULT_BG : bg;
+    return bg === this.backdrop ? this.palette.bg : bg;
   }
 
   private rawBackground(style: Style, reverse: boolean): number {
     const inverse = has(style, Attr.INVERSE) !== reverse;
-    return inverse ? resolveColor(style.fg, DEFAULT_FG) : resolveColor(style.bg, DEFAULT_BG);
+    return inverse ? resolveColor(this.palette, style.fg, this.palette.fg) : resolveColor(this.palette, style.bg, this.palette.bg);
   }
 
   private color(argb: number): Float32Array {

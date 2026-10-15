@@ -1,32 +1,39 @@
 import { DEFAULT, TRUECOLOR } from "@corral/core";
 
-/** A purple-tinted ANSI palette tuned for the near-black terminal ground. Colors are 0xAARRGGBB. */
-export const DEFAULT_FG = 0xffe6e1f0;
-export const DEFAULT_BG = 0xff08060c;
-export const CURSOR = 0xffa78bfa;
-
-const ANSI16 = [
-  // Color 0 sits just above the ground so "explicit black" backgrounds don't show as gray blocks.
-  0xff120e19, 0xfff07a8a, 0xff5dd3a8, 0xfff2b84b, 0xff8b9cfa, 0xffc084fc, 0xff67d3e0, 0xffd9d3e6,
-  0xff5a5070, 0xffff9aa8, 0xff8be3c2, 0xfff7cf7a, 0xffa9b6ff, 0xffd6a6ff, 0xff93e4ee, 0xfff5f2fa,
-];
+/** A terminal's colors as 0xAARRGGBB: the 16 ANSI colors come from the theme, the rest of the 256 are standard. */
+export interface Palette {
+  fg: number;
+  bg: number;
+  cursor: number;
+  /** All 256 indexed colors. */
+  table: readonly number[];
+}
 
 const argb = (r: number, g: number, b: number) => (0xff000000 | (r << 16) | (g << 8) | b) >>> 0;
 
-const TABLE: number[] = Array.from({ length: 256 }, (_, i) => {
-  if (i < 16) return ANSI16[i];
-  if (i < 232) {
-    const n = i - 16;
-    const levels = [0, 95, 135, 175, 215, 255];
-    return argb(levels[Math.floor(n / 36)], levels[Math.floor(n / 6) % 6], levels[n % 6]);
-  }
-  const v = 8 + 10 * (i - 232);
-  return argb(v, v, v);
-});
+/** "#rrggbb" (or "#rrggbbaa", alpha ignored) as 0xffRRGGBB; gray if it can't be read. */
+export function hexColor(hex: string | undefined): number {
+  const m = /^#?([0-9a-f]{6})/i.exec(hex ?? "");
+  return m ? (0xff000000 | parseInt(m[1], 16)) >>> 0 : 0xff808080;
+}
 
-export function resolveColor(color: number, fallback: number): number {
+export function makePalette(fg: number, bg: number, cursor: number, ansi16: readonly number[]): Palette {
+  const table = Array.from({ length: 256 }, (_, i) => {
+    if (i < 16) return ansi16[i] ?? fg;
+    if (i < 232) {
+      const n = i - 16;
+      const levels = [0, 95, 135, 175, 215, 255];
+      return argb(levels[Math.floor(n / 36)], levels[Math.floor(n / 6) % 6], levels[n % 6]);
+    }
+    const v = 8 + 10 * (i - 232);
+    return argb(v, v, v);
+  });
+  return { fg, bg, cursor, table };
+}
+
+export function resolveColor(p: Palette, color: number, fallback: number): number {
   if (color === DEFAULT) return fallback;
   if (color >= TRUECOLOR) return (0xff000000 | (color & 0xffffff)) >>> 0;
-  if (color >= 0 && color <= 255) return TABLE[color];
+  if (color >= 0 && color <= 255) return p.table[color];
   return fallback;
 }

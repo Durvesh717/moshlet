@@ -4,8 +4,10 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
+import { useCSSVariable } from "uniwind";
 import { overTerminal } from "../lib/overlay";
 import { TERMINAL_FONTS } from "../theme";
+import { hexColor, makePalette, type Palette } from "./palette";
 import { Renderer } from "./renderer";
 
 export interface TerminalViewHandle {
@@ -39,6 +41,24 @@ export interface TerminalViewProps {
   onRemoteScroll(notches: number): void;
   onTouchStart(): void;
   onFocusChange(focused: boolean): void;
+}
+
+const TERM_VARS = [
+  "--color-term-fg",
+  "--color-terminal",
+  "--color-term-cursor",
+  ...Array.from({ length: 16 }, (_, i) => `--color-term-${i}`),
+];
+
+/** The theme's terminal colors (global.css); a new palette when the theme changes. */
+function useTerminalPalette(): Palette {
+  const values = useCSSVariable(TERM_VARS) as (string | undefined)[];
+  const key = values.join("|");
+  return useMemo(() => {
+    const [fg, bg, cursor, ...ansi] = values.map((v) => hexColor(v));
+    return makePalette(fg, bg, cursor, ansi);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 }
 
 function emptyPicture(): SkPicture {
@@ -76,9 +96,10 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   const symRegular = useTypeface(TERMINAL_FONTS["Adwaita Mono"][0]);
   const symBold = useTypeface(TERMINAL_FONTS["Adwaita Mono"][1]);
   const provider = useFonts(TERMINAL_FONTS);
+  const palette = useTerminalPalette();
   const renderer = useMemo(
-    () => (regular && bold && symRegular && symBold ? new Renderer({ regular, bold, symRegular, symBold, provider }, props.fontSize, PixelRatio.get()) : null),
-    // The font size is applied separately so pinching doesn't rebuild the renderer.
+    () => (regular && bold && symRegular && symBold ? new Renderer({ regular, bold, symRegular, symBold, provider }, props.fontSize, PixelRatio.get(), palette) : null),
+    // The font size and colors are applied separately: pinching or a new theme don't rebuild the renderer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [regular, bold, symRegular, symBold, provider],
   );
@@ -166,6 +187,11 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     updateGrid();
     redraw();
   }, [renderer, props.fontSize, updateGrid, redraw]);
+
+  useEffect(() => {
+    renderer?.setPalette(palette);
+    redraw();
+  }, [renderer, palette, redraw]);
 
   // ---- scrolling: live (wheel events to the pane) and local (History mode)
   const fling = useRef<{ raf: number; local: boolean } | null>(null);
