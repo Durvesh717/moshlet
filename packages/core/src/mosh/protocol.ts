@@ -13,7 +13,8 @@ const MIN_RTO = 50;
 const MAX_RTO = 1000;
 const MIN_SEND_INTERVAL = 20;
 const MAX_SEND_INTERVAL = 250;
-const SEND_MINDELAY = 8;
+// Input goes out 1 ms after the first keystroke, as in the reference client (its server waits 8 ms to batch screen updates).
+const SEND_MINDELAY = 1;
 const ACK_DELAY = 100;
 const ACK_INTERVAL = 3000;
 const SHUTDOWN_RETRIES = 16;
