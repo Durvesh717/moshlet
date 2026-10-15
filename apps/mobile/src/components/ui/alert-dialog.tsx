@@ -27,7 +27,7 @@ function AlertDialogOverlay({
     <FullWindowOverlay>
       <AlertDialogPrimitive.Overlay
         className={cn(
-          "absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-black/50 p-2",
+          "absolute bottom-0 left-0 right-0 top-0 z-50 flex items-center justify-center bg-scrim p-7",
           Platform.select({
             web: "animate-in fade-in-0 fixed",
           }),
@@ -95,7 +95,7 @@ function AlertDialogDescription({ className, ...props }: React.ComponentProps<ty
 
 function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
   return (
-    <TextClassContext.Provider value={buttonTextVariants({ className })}>
+    <TextClassContext.Provider value={buttonTextVariants()}>
       <AlertDialogPrimitive.Action className={cn(buttonVariants(), className)} {...props} />
     </TextClassContext.Provider>
   );
@@ -103,7 +103,7 @@ function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof 
 
 function AlertDialogCancel({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
   return (
-    <TextClassContext.Provider value={buttonTextVariants({ className, variant: "outline" })}>
+    <TextClassContext.Provider value={buttonTextVariants({ variant: "outline" })}>
       <AlertDialogPrimitive.Cancel className={cn(buttonVariants({ variant: "outline" }), className)} {...props} />
     </TextClassContext.Provider>
   );
