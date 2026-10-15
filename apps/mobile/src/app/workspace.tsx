@@ -142,6 +142,7 @@ export default function WorkspaceScreen() {
             });
           }}
           onSwitchSession={(name) => session.switchSession(name)}
+          onRefreshSessions={() => void session.refreshSessions()}
           onHosts={() => {
             setDrawerOpen(false);
             void closeHost();

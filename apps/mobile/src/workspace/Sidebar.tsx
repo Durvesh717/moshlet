@@ -20,6 +20,8 @@ export function Sidebar(props: {
   onNewTab(workspaceId: string): void;
   onNewWorkspace(): void;
   onSwitchSession(name: string): void;
+  /** The switcher opened: fetch which sessions are running now. */
+  onRefreshSessions(): void;
   onHosts(): void;
 }) {
   const insets = useSafeAreaInsets();
@@ -48,7 +50,13 @@ export function Sidebar(props: {
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 10, paddingLeft: insets.left + 16 }]}>
-      <Pressable style={styles.header} onPress={() => setSessionsOpen(true)}>
+      <Pressable
+        style={styles.header}
+        onPress={() => {
+          setSessionsOpen(true);
+          props.onRefreshSessions();
+        }}
+      >
         <View style={styles.hostIcon}>
           <Text style={styles.hostLetter}>{props.hostName.slice(0, 1).toLowerCase()}</Text>
         </View>
