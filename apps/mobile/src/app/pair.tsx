@@ -80,7 +80,7 @@ export default function Pair() {
 
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <ScrollView ref={scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]} keyboardShouldPersistTaps="handled">
         <IconButton icon={ArrowLeft} label="Back" onPress={() => router.back()} />
         <Text style={styles.title}>Add a computer</Text>
         <Text style={styles.body}>
@@ -145,7 +145,7 @@ export default function Pair() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ground },
-  content: { paddingHorizontal: 20, gap: 16 },
+  content: { gap: 16 },
   title: { fontFamily: F.bold, fontSize: 28, color: C.text, marginTop: 8 },
   body: { fontFamily: F.regular, fontSize: 15, lineHeight: 22, color: C.muted },
   code: { fontFamily: F.mono, color: C.accent },

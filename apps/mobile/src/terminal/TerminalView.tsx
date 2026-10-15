@@ -1,7 +1,7 @@
 import { KeyField, type Cell, type MoshClient, type Screen } from "@corral/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
+import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { TERMINAL_FONTS } from "../theme";
@@ -340,6 +340,21 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     cols: () => grid.current.cols,
   }));
 
+  // Android can leave Skia's surface without a GL context once the app has been in the background
+  // (the screen locked), and every frame after that draws nothing. A fresh Canvas draws again.
+  const [surface, setSurface] = useState(0);
+  useEffect(() => {
+    let away = false;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "background") away = true;
+      else if (state === "active" && away) {
+        away = false;
+        setSurface((n) => n + 1);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   const onLayout = (e: LayoutChangeEvent) => {
     size.current = { width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height };
     updateGrid();
@@ -349,7 +364,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   return (
     <View style={styles.root} onLayout={onLayout}>
       <GestureDetector gesture={gesture}>
-        <Canvas style={StyleSheet.absoluteFill}>
+        <Canvas key={surface} style={StyleSheet.absoluteFill}>
           <Picture picture={picture} />
         </Canvas>
       </GestureDetector>

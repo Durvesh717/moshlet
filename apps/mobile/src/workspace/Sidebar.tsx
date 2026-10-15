@@ -48,7 +48,7 @@ export function Sidebar(props: {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 10 }]}>
+    <View style={[styles.root, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 10, paddingLeft: insets.left + 16 }]}>
       <Pressable style={styles.header} onPress={() => setSessionsOpen(true)}>
         <View style={styles.hostIcon}>
           <Text style={styles.hostLetter}>{props.hostName.slice(0, 1).toLowerCase()}</Text>

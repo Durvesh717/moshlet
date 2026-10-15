@@ -131,7 +131,7 @@ export default function WorkspaceScreen() {
         />
       )}
     >
-      <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top, paddingBottom: keyboardUp ? 0 : insets.bottom }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top, paddingBottom: keyboardUp ? 0 : insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <TopBar
           workspace={ws}
           tab={tab}
