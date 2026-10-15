@@ -2,8 +2,8 @@ import { AGENT_PORT, AgentConnection, AgentError, type PairResult } from "@corra
 import * as Device from "expo-device";
 import { useRouter } from "expo-router";
 import { ArrowLeft } from "lucide-react-native";
-import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { agentUrl, saveHosts, saveToken, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
@@ -21,6 +21,14 @@ export default function Pair() {
   const [port, setPort] = useState(String(AGENT_PORT));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scroll = useRef<ScrollView>(null);
+  const codeInput = useRef<TextInput>(null);
+
+  // Keep the Pair button in view above the keyboard; the fields fit above it.
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidShow", () => scroll.current?.scrollToEnd({ animated: true }));
+    return () => sub.remove();
+  }, []);
 
   const formatted = (raw: string) => {
     const c = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
@@ -71,8 +79,8 @@ export default function Pair() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView ref={scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
         <IconButton icon={ArrowLeft} label="Back" onPress={() => router.back()} />
         <Text style={styles.title}>Add a computer</Text>
         <Text style={styles.body}>
@@ -84,19 +92,25 @@ export default function Pair() {
           <TextInput
             value={address}
             onChangeText={setAddress}
-            placeholder="100.x.y.z or name.tailnet.ts.net"
+            placeholder="100.x.y.z or name.ts.net"
             placeholderTextColor={C.idle}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType={Platform.OS === "android" ? "visible-password" : "url"}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => codeInput.current?.focus()}
             style={styles.input}
           />
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Pairing code</Text>
           <TextInput
+            ref={codeInput}
             value={code}
             onChangeText={(t) => setCode(formatted(t))}
+            returnKeyType="go"
+            onSubmitEditing={() => void submit()}
             placeholder="XXXX-XXXX"
             placeholderTextColor={C.idle}
             autoCapitalize="characters"
@@ -106,7 +120,14 @@ export default function Pair() {
         </View>
         <View style={styles.field}>
           <Text style={styles.label}>Port</Text>
-          <TextInput value={port} onChangeText={setPort} keyboardType="number-pad" style={[styles.input, { width: 120 }]} />
+          <TextInput
+            value={port}
+            onChangeText={setPort}
+            keyboardType="number-pad"
+            returnKeyType="go"
+            onSubmitEditing={() => void submit()}
+            style={[styles.input, { width: 120 }]}
+          />
         </View>
 
         {error && <Text style={styles.error}>{error}</Text>}
