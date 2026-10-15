@@ -15,3 +15,5 @@ export * from "./herdr/api.ts";
 export * from "./herdr/approval.ts";
 export * from "./agent/protocol.ts";
 export { AgentConnection, AgentError } from "./agent/client.ts";
+export * from "./host/shell.ts";
+export * from "./host/link.ts";

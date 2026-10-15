@@ -1,6 +1,6 @@
 import type { Pane, ReadSource, Snapshot, SplitDirection } from "./model.ts";
 
-/** Sends one request to herdr's socket API (directly on the computer, through the agent on a phone). */
+/** Sends one request to herdr's socket API (over SSH on a phone, through herdr's stdio bridge). */
 export type HerdrCall = (method: string, params?: Record<string, unknown>) => Promise<Record<string, unknown>>;
 
 export class HerdrError extends Error {
