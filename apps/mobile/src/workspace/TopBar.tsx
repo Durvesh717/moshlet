@@ -42,9 +42,18 @@ export function TopBar(props: {
       </View>
       <Pressable style={styles.titleBox} onPress={() => props.workspace && setTabsOpen(true)}>
         <View style={styles.row}>
-          <Text style={styles.crumb} numberOfLines={1}>
-            {[props.workspace?.label, props.tab && tabName(props.tab)].filter(Boolean).join(" · ")}
-          </Text>
+          {/* On narrow screens the workspace name gives way first; the tab name is the useful part. */}
+          {props.workspace && (
+            <Text style={styles.crumb} numberOfLines={1}>
+              {props.workspace.label}
+            </Text>
+          )}
+          {props.workspace && props.tab && <Text style={styles.crumbTab}>·</Text>}
+          {props.tab && (
+            <Text style={styles.crumbTab} numberOfLines={1}>
+              {tabName(props.tab)}
+            </Text>
+          )}
           {props.workspace && <ChevronDown size={13} color={C.faint} />}
         </View>
         <View style={styles.row}>
@@ -139,6 +148,7 @@ const styles = StyleSheet.create({
   titleBox: { flex: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: R.md },
   row: { flexDirection: "row", alignItems: "center", gap: 5 },
   crumb: { fontFamily: F.regular, fontSize: 12, color: C.muted, flexShrink: 1 },
+  crumbTab: { fontFamily: F.regular, fontSize: 12, color: C.muted, flexShrink: 0, maxWidth: 140 },
   title: { fontFamily: F.semibold, fontSize: 16, color: C.text, flexShrink: 1 },
   link: { flexDirection: "row", alignItems: "center", gap: 5 },
   linkDot: { width: 7, height: 7, borderRadius: 4 },
