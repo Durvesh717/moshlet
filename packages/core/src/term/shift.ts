@@ -36,3 +36,18 @@ export function rowsMoved(prev: readonly string[], next: readonly string[], min:
   }
   return bestMatches > still ? best : 0;
 }
+
+/**
+ * Rows at the top and bottom that stayed put while the rest moved `k` rows: the header, input box
+ * or status line an app keeps around the part it scrolls. Blank rows at the inner edge of either
+ * block are left to the moving part, since a blank row looks the same moved or not.
+ */
+export function fixedRows(prev: readonly string[], next: readonly string[], k: number): { top: number; bottom: number } {
+  const n = Math.min(prev.length, next.length);
+  const stayed = (y: number) => next[y] === prev[y] && !(y - k >= 0 && y - k < n && prev[y - k] === next[y]);
+  let top = 0;
+  for (let y = 0; y < n && stayed(y); y++) if (next[y] !== "") top = y + 1;
+  let bottom = 0;
+  for (let y = n - 1; y >= top && stayed(y); y--) if (next[y] !== "") bottom = n - y;
+  return { top, bottom };
+}

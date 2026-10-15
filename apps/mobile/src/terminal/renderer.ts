@@ -1,5 +1,6 @@
 import { Attr, has, isBlank, type Cell, type Screen, type Style } from "@corral/core";
 import {
+  ClipOp,
   Skia,
   type SkCanvas,
   type SkFont,
@@ -28,6 +29,15 @@ export interface Frame {
   history: readonly (readonly Cell[])[];
   /** Distance scrolled up from the live screen, in points. */
   scrollPx: number;
+  /**
+   * Live screen rows at the top and bottom that stay in place while the rows between move by
+   * scrollPx: the header and input box of an app that scrolls only its middle.
+   */
+  pinTop: number;
+  pinBottom: number;
+  /** Rows just beyond the moving band (pushed out by recent scrolls), top to bottom, for the edge a move uncovers. */
+  spillAbove: readonly (readonly Cell[])[];
+  spillBelow: readonly (readonly Cell[])[];
   width: number;
   height: number;
   focused: boolean;
@@ -126,8 +136,13 @@ export class Renderer {
     const ox = (f.width - s.cols * this.cellW) / 2;
     const drawCols = Math.min(s.cols, Math.ceil(f.width / this.cellW) + 1);
 
-    // Rows are numbered history first, then the live screen; scrolling moves the window up.
     const h = f.history.length;
+    if (h === 0 && f.scrollPx !== 0) {
+      this.drawMoved(canvas, f, ox, drawCols, reverse);
+      return;
+    }
+
+    // Rows are numbered history first, then the live screen; scrolling moves the window up.
     const topRow = h - f.scrollPx / this.cellH;
     const first = Math.floor(topRow);
     const shift = (first - topRow) * this.cellH;
@@ -140,20 +155,51 @@ export class Renderer {
       else if (v - h < s.rows) this.drawCachedRow(canvas, s.lines[v - h], top, ox, drawCols, reverse, f.width);
     }
 
-    const cy = shift + (h + s.cursorY - first) * this.cellH;
-    if (s.cursorVisible && s.cursorX < drawCols && s.cursorY < s.rows && cy > -this.cellH && cy < f.height) {
-      const cx = ox + s.cursorX * this.cellW;
-      this.fill.setColor(this.color(CURSOR));
-      if (f.focused) {
-        canvas.drawRect(Skia.XYWHRect(cx, cy, this.cellW, this.cellH), this.fill);
-        const cell = s.lines[s.cursorY][s.cursorX];
-        if (!isBlank(cell) && cell.width !== 0 && cell.text.length === 1 && cell.text.charCodeAt(0) < 0x7f) {
-          this.paint.setColor(this.color(DEFAULT_BG));
-          canvas.drawText(cell.text, cx, cy + this.baseline, this.paint, has(cell.style, Attr.BOLD) ? this.mainBold : this.main);
-        }
-      } else {
-        canvas.drawRect(Skia.XYWHRect(cx, cy + this.cellH - this.thin * 2, this.cellW, this.thin * 2), this.fill);
+    this.drawCursor(canvas, f, shift + (h + s.cursorY - first) * this.cellH, ox, drawCols);
+  }
+
+  /**
+   * The live screen with the rows between its pinned ones moved by scrollPx and clipped to their
+   * band, the rows just beyond the band filling the edge the move uncovers.
+   */
+  private drawMoved(canvas: SkCanvas, f: Frame, ox: number, drawCols: number, reverse: boolean): void {
+    const s = f.screen;
+    const ch = this.cellH;
+    const lo = Math.min(f.pinTop, s.rows);
+    const hi = Math.max(lo, s.rows - f.pinBottom);
+    for (let y = 0; y < s.rows; y++) {
+      if (y < lo || y >= hi) this.drawCachedRow(canvas, s.lines[y], y * ch, ox, drawCols, reverse, f.width);
+    }
+    canvas.save();
+    canvas.clipRect(Skia.XYWHRect(0, lo * ch, f.width, (hi - lo) * ch), ClipOp.Intersect, false);
+    const above = f.spillAbove;
+    const below = f.spillBelow;
+    for (let y = lo - above.length; y < hi + below.length; y++) {
+      const top = y * ch + f.scrollPx;
+      if (top + ch <= lo * ch || top >= hi * ch) continue;
+      const line = y < lo ? above[y - lo + above.length] : y < hi ? s.lines[y] : below[y - hi];
+      this.drawCachedRow(canvas, line, top, ox, drawCols, reverse, f.width);
+    }
+    canvas.restore();
+    const moves = s.cursorY >= lo && s.cursorY < hi;
+    const cy = s.cursorY * ch + (moves ? f.scrollPx : 0);
+    if (!moves || (cy >= lo * ch && cy + ch <= hi * ch)) this.drawCursor(canvas, f, cy, ox, drawCols);
+  }
+
+  private drawCursor(canvas: SkCanvas, f: Frame, cy: number, ox: number, drawCols: number): void {
+    const s = f.screen;
+    if (!s.cursorVisible || s.cursorX >= drawCols || s.cursorY >= s.rows || cy <= -this.cellH || cy >= f.height) return;
+    const cx = ox + s.cursorX * this.cellW;
+    this.fill.setColor(this.color(CURSOR));
+    if (f.focused) {
+      canvas.drawRect(Skia.XYWHRect(cx, cy, this.cellW, this.cellH), this.fill);
+      const cell = s.lines[s.cursorY][s.cursorX];
+      if (!isBlank(cell) && cell.width !== 0 && cell.text.length === 1 && cell.text.charCodeAt(0) < 0x7f) {
+        this.paint.setColor(this.color(DEFAULT_BG));
+        canvas.drawText(cell.text, cx, cy + this.baseline, this.paint, has(cell.style, Attr.BOLD) ? this.mainBold : this.main);
       }
+    } else {
+      canvas.drawRect(Skia.XYWHRect(cx, cy + this.cellH - this.thin * 2, this.cellW, this.thin * 2), this.fill);
     }
   }
 

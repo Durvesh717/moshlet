@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Interpreter } from "../src/term/interpreter.ts";
 import { Screen } from "../src/term/screen.ts";
-import { rowsMoved, rowTexts } from "../src/term/shift.ts";
+import { fixedRows, rowsMoved, rowTexts } from "../src/term/shift.ts";
 
 const lines = (from: number, n: number) => Array.from({ length: n }, (_, i) => `line ${from + i}`);
 
@@ -35,6 +35,26 @@ describe("rowsMoved", () => {
     const border = ["──", "x", "──", "x", "──", "x"];
     expect(rowsMoved(border, ["x", "──", "x", "──", "x", "──"], -3, 3, 1)).toBe(1);
     expect(rowsMoved(border, ["x", "──", "x", "──", "x", "──"], -3, 3, -1)).toBe(-1);
+  });
+});
+
+describe("fixedRows", () => {
+  // An app's own scrolling: a title, the messages it scrolls, then its input box and status line.
+  const app = (from: number) => ["Title", "", ...lines(from, 5), "", "╭───╮", "│ > │", "╰───╯", "status"];
+
+  it("finds the header and the input box around the part that moved", () => {
+    expect(fixedRows(app(10), app(9), 1)).toEqual({ top: 1, bottom: 4 });
+    expect(fixedRows(app(10), app(12), -2)).toEqual({ top: 1, bottom: 4 });
+  });
+
+  it("finds nothing fixed when the whole screen moved", () => {
+    expect(fixedRows(lines(10, 8), lines(7, 8), 3)).toEqual({ top: 0, bottom: 0 });
+  });
+
+  it("doesn't take blank rows that happen to match for a header", () => {
+    const prev = ["", "", "x 1", "x 2", "x 3", "x 4"];
+    const next = ["", "", "x 0", "x 1", "x 2", "x 3"];
+    expect(fixedRows(prev, next, 1)).toEqual({ top: 0, bottom: 0 });
   });
 });
 
