@@ -79,7 +79,7 @@ export default function Pair() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView style={styles.root} behavior="padding">
       <ScrollView ref={scroll} contentContainerStyle={[styles.content, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }]} keyboardShouldPersistTaps="handled">
         <IconButton icon={ArrowLeft} label="Back" onPress={() => router.back()} />
         <Text style={styles.title}>Add a computer</Text>

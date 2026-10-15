@@ -3,7 +3,7 @@ import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, StyleSheet, Text, View } from "react-native";
 import { Drawer } from "react-native-drawer-layout";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { activeSession, closeHost } from "../lib/session";
@@ -131,7 +131,10 @@ export default function WorkspaceScreen() {
         />
       )}
     >
-      <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top, paddingBottom: keyboardUp ? 0 : insets.bottom, paddingLeft: insets.left, paddingRight: insets.right }]} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      {/* Padding, not height: resizing itself makes the view re-measure against the keyboard and
+          flip between sizes on some Android versions. It owns the bottom padding, so the
+          navigation bar's inset is a spacer below. */}
+      <KeyboardAvoidingView style={[styles.root, { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right }]} behavior="padding">
         <TopBar
           workspace={ws}
           tab={tab}
@@ -243,6 +246,7 @@ export default function WorkspaceScreen() {
             }}
           />
         )}
+        <View style={{ height: keyboardUp ? 0 : insets.bottom }} />
       </KeyboardAvoidingView>
 
       <ApprovalSheet
