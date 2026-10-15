@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- For the Wi-Fi low-latency lock while a terminal is on screen. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- SSH to the computer. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
