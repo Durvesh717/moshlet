@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="108" height="108">
+  <!-- An open ring (the corral, and a C) around a prompt. Drawn on the 108-unit adaptive icon canvas;
+       everything stays inside the 66-unit safe circle. -->
+  <path d="M70.06 71.84A24 24 0 1 1 70.06 36.16" fill="none" stroke="#F4F0FF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M43 45L52 54L43 63" fill="none" stroke="#F4F0FF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="56" y="59" width="11" height="5.5" rx="2" fill="#C9B6FF"/>
+</svg>

@@ -9,6 +9,7 @@ import { unlock } from "../lib/unlock";
 import { C, F, R } from "../theme";
 import { confirm } from "../ui/Confirm";
 import { SectionLabel } from "../ui/kit";
+import { Logo } from "../ui/Logo";
 
 export default function Hosts() {
   const hosts = useApp((s) => s.hosts);
@@ -45,9 +46,7 @@ export default function Hosts() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <View style={styles.brand}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>c</Text>
-        </View>
+        <Logo size={56} />
         <View>
           <Text style={styles.title}>Corral</Text>
           <Text style={styles.subtitle}>your coding agents, in your pocket</Text>
@@ -97,8 +96,6 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: C.ground },
   content: { paddingHorizontal: 20, gap: 14 },
   brand: { flexDirection: "row", alignItems: "center", gap: 16, marginBottom: 18 },
-  logo: { width: 56, height: 56, borderRadius: 18, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center" },
-  logoText: { fontFamily: F.bold, fontSize: 28, color: "#fff", marginTop: -2 },
   title: { fontFamily: F.bold, fontSize: 30, color: C.text },
   subtitle: { fontFamily: F.regular, fontSize: 15, color: C.muted },
   empty: { backgroundColor: C.surface, borderColor: C.line, borderWidth: 1, borderRadius: R.xl, padding: 20, gap: 8 },

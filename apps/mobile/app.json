@@ -8,13 +8,12 @@
     "scheme": "corral",
     "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon",
       "bundleIdentifier": "dev.corral.app",
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B0812",
+        "backgroundColor": "#6D3FE0",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -32,9 +31,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B0812",
+          "backgroundColor": "#0D0A12",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 88
         }
       ],
       "expo-secure-store",
