@@ -70,6 +70,9 @@ export class MoshProtocol {
   // our stream: user events
   private events: UserEvent[] = [];
   private eventsDropped = 0;
+  /** States sent, by number, with how many input events they carry, until the server echoes them. */
+  private readonly awaitingEcho = new Map<bigint, number>();
+  private echoedEvents = 0;
   private sent: Sent[] = [{ num: 0n, eventCount: 0 }];
   private firstUnsentAt = -1;
   private lastSendAt = -1e12;
@@ -109,6 +112,19 @@ export class MoshProtocol {
 
   private get totalEvents(): number {
     return this.eventsDropped + this.events.length;
+  }
+
+  /** Input events queued so far. */
+  get inputEvents(): number {
+    return this.totalEvents;
+  }
+
+  /**
+   * Input events the server has applied and then waited 50 ms after (mosh's echo ack): output
+   * they cause is on the screen by the frame that reports them.
+   */
+  get echoedInputs(): number {
+    return this.echoedEvents;
   }
 
   private get rto(): number {
@@ -216,6 +232,7 @@ export class MoshProtocol {
       if (unsent || !unacked) {
         // Pending keystrokes ride along with any outgoing ack; with nothing in flight, a heartbeat is a fresh empty state.
         this.sent.push({ num: last.num + 1n, eventCount: total });
+        this.trackEcho(last.num + 1n, total);
         if (unsent) this.firstUnsentAt = -1;
       }
       const target = this.sent[this.sent.length - 1];
@@ -261,7 +278,7 @@ export class MoshProtocol {
       for (const inst of decodeHostMessage(diff)) {
         if (inst.kind === "bytes") Interpreter.apply(screen, inst.data);
         else if (inst.kind === "resize") screen.resize(inst.cols, inst.rows);
-        // echoAck is only used for local echo prediction, which we don't do (yet)
+        else if (inst.kind === "echoAck") this.echoed(inst.num);
       }
     }
     const state = { num: newNum, screen };
@@ -277,6 +294,21 @@ export class MoshProtocol {
     if (screen === this.latest) return false;
     this.latest = screen;
     return true;
+  }
+
+  private trackEcho(num: bigint, eventCount: number): void {
+    this.awaitingEcho.set(num, eventCount);
+    // A server that never echoes shouldn't make this grow forever.
+    if (this.awaitingEcho.size > MAX_RECEIVED_STATES) this.awaitingEcho.delete(this.awaitingEcho.keys().next().value!);
+  }
+
+  private echoed(num: bigint): void {
+    const count = this.awaitingEcho.get(num);
+    if (count !== undefined && count > this.echoedEvents) this.echoedEvents = count;
+    for (const n of this.awaitingEcho.keys()) {
+      if (n > num) break;
+      this.awaitingEcho.delete(n);
+    }
   }
 
   private processAck(ack: bigint): void {
