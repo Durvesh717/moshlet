@@ -2,6 +2,7 @@ import * as Speech from "expo-speech-recognition";
 import { Keyboard as KeyboardIcon, Mic, Pencil, Send, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { toast } from "../lib/store";
 import { C, F, R } from "../theme";
 import { IconButton, KeyCap, KeyLabel } from "../ui/kit";
 
@@ -86,24 +87,42 @@ export function KeyBar(props: {
 export function Composer(props: { placeholder: string; onSend(text: string): void; onClose(): void }) {
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
+  // What the recognizer has heard so far, shown after the text until it settles.
+  const [heard, setHeard] = useState("");
   const input = useRef<TextInput>(null);
+  const listeningRef = useRef(false);
+  listeningRef.current = listening;
 
   useEffect(() => {
     const t = setTimeout(() => input.current?.focus(), 50);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      if (listeningRef.current) Speech.ExpoSpeechRecognitionModule.abort();
+    };
   }, []);
 
   Speech.useSpeechRecognitionEvent("result", (e) => {
-    const spoken = e.results[0]?.transcript;
-    if (spoken && e.isFinal) setText((cur) => (cur.trim() ? `${cur} ${spoken}` : spoken));
+    const spoken = e.results[0]?.transcript ?? "";
+    if (!e.isFinal) return setHeard(spoken);
+    setHeard("");
+    if (spoken) setText((cur) => joinWords(cur, spoken));
   });
-  Speech.useSpeechRecognitionEvent("end", () => setListening(false));
+  Speech.useSpeechRecognitionEvent("end", () => {
+    setListening(false);
+    setHeard("");
+  });
+  Speech.useSpeechRecognitionEvent("error", (e) => {
+    setListening(false);
+    if (e.error !== "no-speech" && e.error !== "aborted") toast(`Dictation: ${e.message}`);
+  });
 
   const dictate = async () => {
+    // A second tap ends the dictation; what was heard so far still arrives as the final result.
+    if (listening) return Speech.ExpoSpeechRecognitionModule.stop();
     const perm = await Speech.ExpoSpeechRecognitionModule.requestPermissionsAsync();
-    if (!perm.granted) return;
+    if (!perm.granted) return toast("Dictation needs the microphone");
     setListening(true);
-    Speech.ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: false, continuous: false });
+    Speech.ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: false });
   };
 
   const send = () => {
@@ -117,8 +136,11 @@ export function Composer(props: { placeholder: string; onSend(text: string): voi
       <IconButton icon={X} label="Close" size={42} onPress={props.onClose} />
       <TextInput
         ref={input}
-        value={text}
-        onChangeText={setText}
+        value={heard ? joinWords(text, heard) : text}
+        onChangeText={(t) => {
+          setHeard("");
+          setText(t);
+        }}
         placeholder={props.placeholder}
         placeholderTextColor={C.faint}
         multiline
@@ -127,7 +149,7 @@ export function Composer(props: { placeholder: string; onSend(text: string): voi
         submitBehavior="blurAndSubmit"
         returnKeyType="send"
       />
-      {text.trim() ? (
+      {text.trim() && !listening ? (
         <Pressable accessibilityLabel="Send" onPress={send} style={({ pressed }) => [styles.send, pressed && { opacity: 0.8 }]}>
           <Send size={19} color="#fff" />
         </Pressable>
@@ -157,3 +179,5 @@ const styles = StyleSheet.create({
   },
   send: { width: 42, height: 42, borderRadius: R.pill, backgroundColor: C.accentStrong, alignItems: "center", justifyContent: "center" },
 });
+
+const joinWords = (a: string, b: string) => (a.trim() ? `${a.trimEnd()} ${b}` : b);
