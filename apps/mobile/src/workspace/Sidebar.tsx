@@ -1,4 +1,4 @@
-import { agentName, panesOf, tabName, tabsOf, urgency, type SessionInfo, type Snapshot } from "@corral/core";
+import { agentName, panesOf, tabName, tabsOf, urgency, type SessionInfo, type Snapshot } from "@moshlet/core";
 import { ChevronDown, ChevronRight, ChevronsUpDown, LayoutGrid, Monitor, Plus, Search } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";

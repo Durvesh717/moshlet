@@ -1,4 +1,4 @@
-package dev.corral.nativebits
+package dev.moshlet.nativebits
 
 import android.app.KeyguardManager
 import android.content.Context
@@ -179,7 +179,7 @@ class IdentityVault(private val context: Context) {
   }
 
   companion object {
-    private const val ALIAS = "corral-identity-wrap"
+    private const val ALIAS = "moshlet-identity-wrap"
     private const val TRANSFORM = "AES/GCM/NoPadding"
     private const val UNLOCK_VALIDITY_SEC = 300
   }

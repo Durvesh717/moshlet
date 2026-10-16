@@ -1,7 +1,7 @@
 import Svg, { Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import { useCSSVariable } from "uniwind";
 
-/** The app mark on its tile, as in assets/brand: an open ring (the corral) around a prompt, in the theme's colors. */
+/** The app mark on its tile, as in assets/brand: a prompt (a stand-in until the Moshlet logo), in the theme's colors. */
 export function Logo(props: { size: number }) {
   const [from, to, chip, mark] = useCSSVariable(["--color-logo-from", "--color-logo-to", "--color-logo-chip", "--color-logo-mark"]) as string[];
   return (
@@ -18,9 +18,8 @@ export function Logo(props: { size: number }) {
       </Defs>
       <Rect x={9} y={9} width={90} height={90} rx={29} fill="url(#logoBase)" />
       <Rect x={9} y={9} width={90} height={90} rx={29} fill="url(#logoGlow)" />
-      <Path d="M70.06 71.84A24 24 0 1 1 70.06 36.16" fill="none" stroke={mark} strokeWidth={8} strokeLinecap="round" />
-      <Path d="M43 45L52 54L43 63" fill="none" stroke={mark} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" />
-      <Rect x={56} y={59} width={11} height={5.5} rx={2} fill={chip} />
+      <Path d="M36 40L50 54L36 68" fill="none" stroke={mark} strokeWidth={8} strokeLinecap="round" strokeLinejoin="round" />
+      <Rect x={55} y={62} width={17} height={7} rx={3.5} fill={chip} />
     </Svg>
   );
 }

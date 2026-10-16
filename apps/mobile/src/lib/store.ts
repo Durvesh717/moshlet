@@ -1,4 +1,4 @@
-import type { Cell, Link, MoshClient, SessionInfo, Snapshot } from "@corral/core";
+import type { Cell, Link, MoshClient, SessionInfo, Snapshot } from "@moshlet/core";
 import { create } from "zustand";
 import type { Host } from "./hosts";
 

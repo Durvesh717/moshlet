@@ -3,11 +3,11 @@ plugins {
   id 'expo-module-gradle-plugin'
 }
 
-group = 'dev.corral'
+group = 'dev.moshlet'
 version = '0.1.0'
 
 android {
-  namespace "dev.corral.nativebits"
+  namespace "dev.moshlet.nativebits"
   defaultConfig {
     versionCode 1
     versionName '0.1.0'

@@ -1,25 +1,25 @@
 {
   "expo": {
-    "name": "Corral",
-    "slug": "corral",
+    "name": "Moshlet",
+    "slug": "moshlet",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "corral",
+    "scheme": "moshlet",
     "userInterfaceStyle": "dark",
     "ios": {
-      "bundleIdentifier": "dev.corral.app",
+      "bundleIdentifier": "dev.moshlet.app",
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#6D3FE0",
+        "backgroundColor": "#1F5EFF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "dev.corral.app",
+      "package": "dev.moshlet.app",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.USE_BIOMETRIC",
@@ -31,7 +31,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0D0A12",
+          "backgroundColor": "#0B0B0D",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 88
         }
@@ -41,8 +41,8 @@
       [
         "expo-speech-recognition",
         {
-          "microphonePermission": "Corral uses the microphone to dictate prompts.",
-          "speechRecognitionPermission": "Corral turns your speech into prompts for your agents.",
+          "microphonePermission": "Moshlet uses the microphone to dictate prompts.",
+          "speechRecognitionPermission": "Moshlet turns your speech into prompts for your agents.",
           "androidSpeechServicePackages": [
             "com.google.android.googlequicksearchbox"
           ]
@@ -51,7 +51,7 @@
       [
         "expo-local-authentication",
         {
-          "faceIDPermission": "Corral uses Face ID to unlock your computers."
+          "faceIDPermission": "Moshlet uses Face ID to unlock your computers."
         }
       ],
       [

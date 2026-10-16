@@ -1,5 +1,5 @@
 {
-  "name": "@corral/core",
+  "name": "@moshlet/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",

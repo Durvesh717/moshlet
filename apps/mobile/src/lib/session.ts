@@ -14,11 +14,11 @@ import {
   type Link,
   type Snapshot,
   type SplitDirection,
-} from "@corral/core";
+} from "@moshlet/core";
 import { AppState, type AppStateStatus } from "react-native";
 import * as Network from "expo-network";
-import { nativeUdp, setLowLatencyWifi } from "../../modules/corral-native";
-import type { SshConnection } from "../../modules/corral-native/ssh";
+import { nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-native";
+import type { SshConnection } from "../../modules/moshlet-native/ssh";
 import { saveHosts, type Host } from "./hosts";
 import { deviceIdentity, signIn, SignInError } from "./ssh";
 import { toast, useApp, type LinkUi } from "./store";

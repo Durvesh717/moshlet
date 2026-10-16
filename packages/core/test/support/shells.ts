@@ -59,9 +59,9 @@ function processShell(start: (command: string) => ChildProcess): Shell {
  */
 export async function startTestSshd(): Promise<{ port: number; key: string; stop(): void } | null> {
   if (!existsSync("/usr/bin/sshd")) return null;
-  const dir = mkdtempSync(join(tmpdir(), "corral-sshd-"));
+  const dir = mkdtempSync(join(tmpdir(), "moshlet-sshd-"));
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", join(dir, "host_ed25519")]);
-  execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "corral-test", "-f", join(dir, "client")]);
+  execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "moshlet-test", "-f", join(dir, "client")]);
   execFileSync("cp", [join(dir, "client.pub"), join(dir, "authorized_keys")]);
   const port = await freePort();
   writeFileSync(

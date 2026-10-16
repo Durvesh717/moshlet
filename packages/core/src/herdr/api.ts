@@ -32,7 +32,7 @@ export interface PaneText {
   revision: number;
 }
 
-/** Typed wrappers over herdr's API methods that Corral uses. */
+/** Typed wrappers over herdr's API methods that Moshlet uses. */
 export class HerdrApi {
   private readonly call: HerdrCall;
 

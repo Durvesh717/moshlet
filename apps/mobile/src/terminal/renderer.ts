@@ -1,4 +1,4 @@
-import { Attr, has, isBlank, type Cell, type Screen, type Style } from "@corral/core";
+import { Attr, has, isBlank, type Cell, type Screen, type Style } from "@moshlet/core";
 import {
   Skia,
   type SkCanvas,

@@ -1,4 +1,4 @@
-import type { AgentStatus } from "@corral/core";
+import type { AgentStatus } from "@moshlet/core";
 import type { LucideIcon } from "lucide-react-native";
 import { useEffect, type ReactNode } from "react";
 import { StyleSheet, View } from "react-native";

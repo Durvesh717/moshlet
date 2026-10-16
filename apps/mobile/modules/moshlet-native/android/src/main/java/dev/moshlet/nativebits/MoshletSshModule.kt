@@ -1,4 +1,4 @@
-package dev.corral.nativebits
+package dev.moshlet.nativebits
 
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.functions.Coroutine
@@ -41,7 +41,7 @@ import kotlin.concurrent.thread
  * and it starts the mosh-servers the terminals use. JavaScript holds connections by id; the
  * phone's own key never leaves this module.
  */
-class CorralSshModule : Module() {
+class MoshletSshModule : Module() {
   private class Conn(val client: SSHClient, val address: String)
   private class Stream(val session: Session)
   private class HostKeyChanged(val expected: String, val actual: String) : RuntimeException("host key changed")
@@ -49,11 +49,11 @@ class CorralSshModule : Module() {
   private val conns = ConcurrentHashMap<Int, Conn>()
   private val streams = ConcurrentHashMap<String, Stream>()
   private val nextId = AtomicInteger(1)
-  private val timers = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "corral-ssh-timer").apply { isDaemon = true } }
+  private val timers = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "moshlet-ssh-timer").apply { isDaemon = true } }
   private val vault by lazy { IdentityVault(appContext.reactContext!!.applicationContext) }
 
   override fun definition() = ModuleDefinition {
-    Name("CorralSsh")
+    Name("MoshletSsh")
 
     Events("onSshClosed", "onSshLine", "onSshStreamEnd")
 
@@ -197,7 +197,7 @@ class CorralSshModule : Module() {
         cmd.outputStream.write(stdin.toByteArray())
         cmd.outputStream.flush()
         streams[streamId] = Stream(session)
-        thread(name = "corral-ssh-stream", isDaemon = true) {
+        thread(name = "moshlet-ssh-stream", isDaemon = true) {
           var reason = "ended"
           try {
             cmd.inputStream.bufferedReader().forEachLine { sendEvent("onSshLine", mapOf("stream" to streamId, "line" to it)) }

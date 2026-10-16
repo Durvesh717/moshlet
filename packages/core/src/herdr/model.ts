@@ -1,6 +1,6 @@
 /**
  * herdr's session model, with herdr's own JSON field names so snapshots pass straight through
- * the agent to the app. Only the fields Corral uses are typed.
+ * the agent to the app. Only the fields Moshlet uses are typed.
  */
 
 export type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";

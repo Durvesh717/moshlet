@@ -1,4 +1,4 @@
-import { KeyField, type Cell, type MoshClient, type Screen } from "@corral/core";
+import { KeyField, type Cell, type MoshClient, type Screen } from "@moshlet/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";

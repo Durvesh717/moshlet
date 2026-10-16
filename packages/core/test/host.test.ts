@@ -12,7 +12,7 @@ import { nodeUdp } from "../src/node/udp.ts";
 import type { Screen } from "../src/term/screen.ts";
 import { localShell, sshShell, startTestSshd } from "./support/shells.ts";
 
-const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0rRAL0oNe0ONlYt3sT0mR4nd0mK3yZZ0Tt8vYqYHnB corral@test-phone";
+const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC0rRAL0oNe0ONlYt3sT0mR4nd0mK3yZZ0Tt8vYqYHnB moshlet@test-phone";
 
 describe("shell commands", () => {
   it("quotes anything without backslashes, and posix() runs it through sh", async () => {
@@ -24,7 +24,7 @@ describe("shell commands", () => {
   });
 
   it("adds the phone's key once, keeping the file's last line intact", async () => {
-    const home = mkdtempSync(join(tmpdir(), "corral-home-"));
+    const home = mkdtempSync(join(tmpdir(), "moshlet-home-"));
     const link = new HostLink(localShell({ HOME: home }));
     await link.installKey(KEY);
     await link.installKey(KEY);
@@ -41,10 +41,10 @@ describe("shell commands", () => {
 
 /**
  * End to end against the real herdr and mosh-server on this machine, over a throwaway sshd on
- * loopback, in an isolated herdr session (default "scratch", override with CORRAL_TEST_SESSION).
+ * loopback, in an isolated herdr session (default "scratch", override with MOSHLET_TEST_SESSION).
  * Skipped when that session isn't running.
  */
-const SESSION = process.env.CORRAL_TEST_SESSION ?? "scratch";
+const SESSION = process.env.MOSHLET_TEST_SESSION ?? "scratch";
 const sessionRunning = (() => {
   try {
     return (JSON.parse(execFileSync("herdr", ["session", "list", "--json"]).toString()) as { sessions: { name: string; running: boolean }[] })
@@ -89,7 +89,7 @@ describe.skipIf(!sessionRunning)("HostLink over SSH", () => {
     const snap = await api.snapshot();
     expect(snap.panes.length).toBeGreaterThan(0);
     await expect(api.closePane("w999:p999")).rejects.toMatchObject({ code: expect.any(String) });
-    await expect(new HerdrApi(link.herdr("corral-no-such-session")).ping()).rejects.toMatchObject({ code: "herdr_unavailable" });
+    await expect(new HerdrApi(link.herdr("moshlet-no-such-session")).ping()).rejects.toMatchObject({ code: "herdr_unavailable" });
   });
 
   it("streams herdr events while watching", async (ctx) => {
@@ -101,7 +101,7 @@ describe.skipIf(!sessionRunning)("HostLink over SSH", () => {
     const event = new Promise<Record<string, unknown>>((resolve) => (got = resolve));
     let ended = "";
     const watch = await link.watch(SESSION, snap.panes.map((p) => p.pane_id), (e) => got(e), (r) => (ended = r));
-    await api.renameTab(tab.tab_id, `corral-test-${Date.now() % 1000}`);
+    await api.renameTab(tab.tab_id, `moshlet-test-${Date.now() % 1000}`);
     expect(String((await event).event)).toMatch(/^tab_/);
     await api.renameTab(tab.tab_id, tab.label);
     watch.close();

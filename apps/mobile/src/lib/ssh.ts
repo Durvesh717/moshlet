@@ -1,11 +1,11 @@
 import * as Device from "expo-device";
-import { errorCode, loadIdentity, SshConnection } from "../../modules/corral-native/ssh";
+import { errorCode, loadIdentity, SshConnection } from "../../modules/moshlet-native/ssh";
 import type { Host } from "./hosts";
 import { unlock } from "./unlock";
 
 /** The comment on this device's public key, so it's recognisable in authorized_keys. */
 export const keyComment = (): string =>
-  `corral@${(Device.modelName ?? Device.deviceName ?? "phone").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "")}`;
+  `moshlet@${(Device.modelName ?? Device.deviceName ?? "phone").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "")}`;
 
 /**
  * This device's SSH key, unlocked: asks for fingerprint/PIN if the key is locked (it stays usable

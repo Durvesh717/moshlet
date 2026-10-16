@@ -1,4 +1,4 @@
-import { HostLink, type HostCheck } from "@corral/core";
+import { HostLink, type HostCheck } from "@moshlet/core";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Check, CircleAlert, Copy, KeyRound, ShieldCheck, X } from "lucide-react-native";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
-import { devicePublicKey, SshConnection } from "../../modules/corral-native/ssh";
+import { devicePublicKey, SshConnection } from "../../modules/moshlet-native/ssh";
 import { newHostId, saveHosts, type Host } from "../lib/hosts";
 import { closeHost, openHost } from "../lib/session";
 import { deviceIdentity } from "../lib/ssh";
@@ -238,7 +238,7 @@ export default function AddComputer() {
           <>
             <Title>Get the computer ready</Title>
             <Body>
-              Corral signs in to the computer running herdr over SSH, like a terminal would, and runs your panes over mosh. Nothing of Corral's is installed there. Once per computer:
+              Moshlet signs in to the computer running herdr over SSH, like a terminal would, and runs your panes over mosh. Nothing of Moshlet's is installed there. Once per computer:
             </Body>
             <Choices<Os> value={os} onChange={setOs} height={34} options={(Object.keys(OS_LABEL) as Os[]).map((o) => ({ value: o, label: OS_LABEL[o] }))} />
             <Item n={1} title="Tailscale on both">
@@ -253,9 +253,9 @@ export default function AddComputer() {
               <Command text={MOSH_INSTALL[os]} onCopy={copy} />
             </Item>
             <Item n={4} title="herdr running">
-              <Small>Start herdr there as usual. Corral shows its workspaces, tabs and agents.</Small>
+              <Small>Start herdr there as usual. Moshlet shows its workspaces, tabs and agents.</Small>
             </Item>
-            <Note>Corral checks all of this in the last step and tells you what's missing.</Note>
+            <Note>Moshlet checks all of this in the last step and tells you what's missing.</Note>
             <Action label="Continue" onPress={() => go("where")} />
           </>
         )}
@@ -321,7 +321,7 @@ export default function AddComputer() {
             </View>
             <Body>To compare, run this on the computer:</Body>
             <Command text={`ssh-keygen -lf /etc/ssh/ssh_host_${keyFile(conn.keyType)}_key.pub`} onCopy={copy} />
-            <Note>Corral remembers this key and won't connect if it ever changes.</Note>
+            <Note>Moshlet remembers this key and won't connect if it ever changes.</Note>
             {error && <ErrorBox text={error} />}
             <Action label="Trust and continue" busy={busy} onPress={() => void trusted()} />
           </>
@@ -331,7 +331,7 @@ export default function AddComputer() {
           <>
             <Title>Sign in once</Title>
             <Body>
-              Enter the password for <Code>{t.user}</Code> on <Code>{t.address}</Code>. Corral uses it once to add this device's key to <Code>~/.ssh/authorized_keys</Code>,
+              Enter the password for <Code>{t.user}</Code> on <Code>{t.address}</Code>. Moshlet uses it once to add this device's key to <Code>~/.ssh/authorized_keys</Code>,
               and signs in with the key from then on. The password isn't stored.
             </Body>
             <Field label="Password">
@@ -394,7 +394,7 @@ export default function AddComputer() {
                     }))}
                   />
                 </Field>
-                <Field label="Name in Corral">
+                <Field label="Name in Moshlet">
                   <Input value={name} onChangeText={setName} autoCorrect={false} returnKeyType="done" className={cn(INPUT, "font-normal")} />
                 </Field>
               </>

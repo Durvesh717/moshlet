@@ -1,7 +1,8 @@
-# Corral
+# Moshlet
 
-A phone and tablet client for herdr over mosh: watch and steer your
-coding agents from Android, iPhone and iPad.
+A phone and tablet client for your coding agents over mosh: watch and steer them from Android,
+iPhone and iPad. Today it works with herdr; tmux sessions, plain terminals and single agents
+come next.
 
 ## Layout
 
@@ -47,5 +48,5 @@ TypeScript runs directly on Node's type stripping: no build step, erasable synta
 (no enums, no parameter properties), imports with `.ts` extensions.
 
 The tests use an isolated herdr session so they never touch your own: start one with
-`HERDR_SESSION=scratch herdr server &` (or set `CORRAL_TEST_SESSION`). The test sshd only
+`HERDR_SESSION=scratch herdr server &` (or set `MOSHLET_TEST_SESSION`). The test sshd only
 listens on loopback, trusts one generated key, and never reads or writes `~/.ssh`.

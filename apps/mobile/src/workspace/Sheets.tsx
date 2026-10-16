@@ -1,4 +1,4 @@
-import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@corral/core";
+import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@moshlet/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2, type LucideIcon } from "lucide-react-native";
 import { forwardRef, useCallback, useEffect, useRef, useState } from "react";

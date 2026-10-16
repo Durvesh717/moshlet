@@ -19,7 +19,7 @@ export interface Host {
   lastUsedAt?: number;
 }
 
-const LIST_KEY = "corral.hosts";
+const LIST_KEY = "moshlet.hosts";
 
 export async function loadHosts(): Promise<Host[]> {
   try {

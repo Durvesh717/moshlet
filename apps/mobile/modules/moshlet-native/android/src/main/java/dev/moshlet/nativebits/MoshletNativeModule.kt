@@ -1,4 +1,4 @@
-package dev.corral.nativebits
+package dev.moshlet.nativebits
 
 import android.content.Context
 import android.net.wifi.WifiManager
@@ -20,16 +20,16 @@ import kotlin.concurrent.thread
  * The few things JavaScript can't do on Android: UDP sockets for mosh, and the Wi-Fi
  * low-latency lock (without it the radio naps between packets, adding 100-400 ms).
  */
-class CorralNativeModule : Module() {
+class MoshletNativeModule : Module() {
   private class Sock(val socket: DatagramSocket, val peer: InetSocketAddress)
 
   private val sockets = ConcurrentHashMap<Int, Sock>()
   private val nextId = AtomicInteger(1)
-  private val sender = Executors.newSingleThreadExecutor { r -> Thread(r, "corral-udp-send").apply { isDaemon = true } }
+  private val sender = Executors.newSingleThreadExecutor { r -> Thread(r, "moshlet-udp-send").apply { isDaemon = true } }
   private var wifiLock: WifiManager.WifiLock? = null
 
   override fun definition() = ModuleDefinition {
-    Name("CorralNative")
+    Name("MoshletNative")
 
     Events("onDatagram")
 
@@ -40,7 +40,7 @@ class CorralNativeModule : Module() {
       socket.receiveBufferSize = 1 shl 18
       val id = nextId.getAndIncrement()
       sockets[id] = Sock(socket, peer)
-      thread(name = "corral-udp-$id", isDaemon = true) {
+      thread(name = "moshlet-udp-$id", isDaemon = true) {
         // mosh-server sends datagrams up to ~1 kB; leave room for larger MTUs.
         val buf = ByteArray(4096)
         val packet = DatagramPacket(buf, buf.size)
@@ -81,7 +81,7 @@ class CorralNativeModule : Module() {
       val context = appContext.reactContext ?: return@Function
       if (on) {
         val lock = wifiLock ?: (context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
-          .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "corral:terminal")
+          .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "moshlet:terminal")
           .apply { setReferenceCounted(false) }
           .also { wifiLock = it }
         if (!lock.isHeld) lock.acquire()

@@ -1,4 +1,4 @@
-import { agentIn, appOwnsScroll, orderedPanes, primaryPane, tabName, tabsOf } from "@corral/core";
+import { agentIn, appOwnsScroll, orderedPanes, primaryPane, tabName, tabsOf } from "@moshlet/core";
 import type { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";

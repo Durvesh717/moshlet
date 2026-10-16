@@ -36,7 +36,7 @@ export default function Hosts() {
   const forget = async (host: Host) => {
     const ok = await confirm({
       title: `Forget ${host.name}?`,
-      message: `Corral removes it from this device. To also revoke this device's key, delete the line ending in "corral@" from the authorized keys of ${host.user} on ${host.name}.`,
+      message: `Moshlet removes it from this device. To also revoke this device's key, delete the line ending in "moshlet@" from the authorized keys of ${host.user} on ${host.name}.`,
       action: "Forget",
       danger: true,
     });
@@ -58,7 +58,7 @@ export default function Hosts() {
       <View className="mb-[18px] flex-row items-center gap-4">
         <Logo size={56} />
         <View>
-          <Text className="font-bold text-[30px]">Corral</Text>
+          <Text className="font-bold text-[30px]">Moshlet</Text>
           <Text className="text-[15px] text-muted-foreground">your coding agents, in your pocket</Text>
         </View>
       </View>
@@ -69,7 +69,7 @@ export default function Hosts() {
           <CardHeader className="gap-2 px-0">
             <CardTitle className="font-semibold text-[17px]">No computers yet</CardTitle>
             <CardDescription className="text-[15px] leading-[22px]">
-              Corral signs in to the computer running herdr over SSH and streams its panes over mosh. Nothing to install there: setup takes five short steps.
+              Moshlet signs in to the computer running herdr over SSH and streams its panes over mosh. Nothing to install there: setup takes five short steps.
             </CardDescription>
           </CardHeader>
         </Card>

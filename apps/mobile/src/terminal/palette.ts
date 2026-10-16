@@ -1,4 +1,4 @@
-import { DEFAULT, TRUECOLOR } from "@corral/core";
+import { DEFAULT, TRUECOLOR } from "@moshlet/core";
 
 /** A terminal's colors as 0xAARRGGBB: the 16 ANSI colors come from the theme, the rest of the 256 are standard. */
 export interface Palette {

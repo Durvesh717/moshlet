@@ -1,5 +1,5 @@
 {
-  "name": "@corral/mobile",
+  "name": "@moshlet/mobile",
   "version": "0.1.0",
   "private": true,
   "main": "expo-router/entry",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@corral/core": "*",
+    "@moshlet/core": "*",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@rn-primitives/alert-dialog": "^1.5.2",
     "@rn-primitives/dropdown-menu": "^1.5.2",

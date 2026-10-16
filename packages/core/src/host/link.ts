@@ -2,9 +2,9 @@ import { HerdrError, subscriptions, type HerdrCall } from "../herdr/api.ts";
 import { posix, quote, ShellError, type Shell } from "./shell.ts";
 
 /**
- * Everything Corral does on the computer, as shell commands over SSH: herdr's API through
+ * Everything Moshlet does on the computer, as shell commands over SSH: herdr's API through
  * `herdr remote-api-bridge` (herdr's own stdio bridge), and mosh-server for terminals. Nothing
- * of Corral's is installed there.
+ * of Moshlet's is installed there.
  */
 
 export interface SessionInfo {
@@ -28,7 +28,7 @@ export interface HostCheck {
   /** Path of herdr, or null when it isn't installed (or not on PATH). */
   herdr: string | null;
   herdrVersion: string | null;
-  /** herdr has the stdio bridge Corral uses (herdr 0.9 and later). */
+  /** herdr has the stdio bridge Moshlet uses (herdr 0.9 and later). */
   bridge: boolean;
   /** Path of mosh-server, or null. */
   mosh: string | null;
@@ -46,8 +46,8 @@ export const MOSH_IDLE_TIMEOUT_SEC = 20;
 const sessionEnv = (session: string): string =>
   session === "default" ? "unset HERDR_SESSION; " : `HERDR_SESSION=${quote(session)}; export HERDR_SESSION; `;
 
-const NO_HERDR = "CORRAL-NO-HERDR";
-const NO_MOSH = "CORRAL-NO-MOSH";
+const NO_HERDR = "MOSHLET-NO-HERDR";
+const NO_MOSH = "MOSHLET-NO-MOSH";
 const findHerdr = `h=$(command -v herdr) || { echo ${NO_HERDR} >&2; exit 127; }; `;
 
 /** Tags this device's mosh-servers on the computer, so leftovers from a killed app can be found. */
@@ -140,7 +140,7 @@ export class HostLink {
     const script =
       `LANG="\${LANG:-C.UTF-8}"; export LANG MOSH_SERVER_NETWORK_TMOUT=${MOSH_IDLE_TIMEOUT_SEC}; ${sessionEnv(session)}` +
       `command -v mosh-server >/dev/null || { echo ${NO_MOSH} >&2; exit 127; }; ${findHerdr}` +
-      `exec mosh-server new -s -c 256 -l LANG="$LANG" -l CORRAL_CLIENT=${safeTag(tag)} -- "$h" terminal attach ${quote(terminalId)} --takeover`;
+      `exec mosh-server new -s -c 256 -l LANG="$LANG" -l MOSHLET_CLIENT=${safeTag(tag)} -- "$h" terminal attach ${quote(terminalId)} --takeover`;
     const r = await this.shell.exec(posix(script), { timeoutMs: 20_000 });
     const connect = /MOSH CONNECT (\d+) (\S+)/.exec(r.stdout);
     if (!connect) {
@@ -161,7 +161,7 @@ export class HostLink {
   async stopMosh(pid: number, tag: string): Promise<void> {
     if (!(pid > 0)) return;
     const script =
-      `p=${pid}; alive() { ps -p $p -o args= 2>/dev/null | grep -q "mosh-server.*CORRAL_CLIENT=${safeTag(tag)} "; }; ` +
+      `p=${pid}; alive() { ps -p $p -o args= 2>/dev/null | grep -q "mosh-server.*MOSHLET_CLIENT=${safeTag(tag)} "; }; ` +
       `alive || exit 0; ( kill $p; sleep 0.3; alive && kill $p; sleep 1.7; alive && kill -9 $p ) </dev/null >/dev/null 2>&1 &`;
     await this.shell.exec(posix(script));
   }
@@ -169,7 +169,7 @@ export class HostLink {
   /** Ends every mosh-server this device left behind (app killed, phone gone). Returns how many processes it signalled. */
   async endMoshSessions(tag: string): Promise<number> {
     // "[m]osh" keeps the pattern from matching this command's own shell.
-    const pattern = quote(`[m]osh-server new .*CORRAL_CLIENT=${safeTag(tag)} `);
+    const pattern = quote(`[m]osh-server new .*MOSHLET_CLIENT=${safeTag(tag)} `);
     const r = await this.shell.exec(posix(`n=$(pgrep -f ${pattern} | wc -l); pkill -f ${pattern}; echo $n`));
     return Number(r.stdout.trim()) || 0;
   }

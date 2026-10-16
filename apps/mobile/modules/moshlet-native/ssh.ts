@@ -1,7 +1,7 @@
-import { ShellError, type ExecResult, type Shell } from "@corral/core";
+import { ShellError, type ExecResult, type Shell } from "@moshlet/core";
 import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
 
-interface CorralSshModule {
+interface MoshletSshModule {
   publicKey(): string | null;
   loadIdentity(comment: string): Promise<{ publicKey: string; fingerprint: string }>;
   connect(host: string, port: number, knownHostKey: string | null, knownKeyType: string | null): Promise<{ id: number; hostKey: string; keyType: string; address: string }>;
@@ -16,7 +16,7 @@ interface CorralSshModule {
   addListener(event: "onSshStreamEnd", cb: (e: { stream: string; reason: string }) => void): EventSubscription;
 }
 
-const native = requireOptionalNativeModule<CorralSshModule>("CorralSsh");
+const native = requireOptionalNativeModule<MoshletSshModule>("MoshletSsh");
 
 const closeHandlers = new Map<number, (reason: string) => void>();
 const lineHandlers = new Map<string, { onLine: (line: string) => void; onEnd: (reason: string) => void }>();
@@ -28,12 +28,12 @@ native?.addListener("onSshStreamEnd", (e) => {
   h?.onEnd(e.reason);
 });
 
-const need = (): CorralSshModule => {
+const need = (): MoshletSshModule => {
   if (!native) throw new Error("SSH isn't available in this build");
   return native;
 };
 
-/** Expo prefixes native errors with "Call to function 'CorralSsh.x' has been rejected. → Caused by:": keep the module's own message. */
+/** Expo prefixes native errors with "Call to function 'MoshletSsh.x' has been rejected. → Caused by:": keep the module's own message. */
 async function call<T>(p: Promise<T>): Promise<T> {
   try {
     return await p;

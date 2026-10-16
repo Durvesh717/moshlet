@@ -6,11 +6,16 @@
    mosh-server, sshd and herdr from Node.
 2. **Android app**: SSH sign-in with a key kept on the device (guided setup, nothing installed on
    the computer), panes over mosh, sidebar of agents, workspaces, tabs and panes, approvals,
-   History, dictation. UI built from React Native Reusables (shadcn) on Uniwind, with five themes:
-   Base, Catppuccin, Gruvbox, Kanagawa and Black & White.
+   History, dictation. UI built from React Native Reusables (shadcn) on Uniwind, with seven themes:
+   Moshlet Cobalt (the default), Moshlet Glacier, Moshlet Daylight, Catppuccin, Gruvbox, Kanagawa
+   and Black & White.
 
 ## Next (not yet scheduled)
 
+- **The Moshlet logo.** The app, launcher icon and splash screen show a stand-in prompt mark
+  until the logo is ready.
+- **Beyond herdr.** tmux sessions, plain terminals, and single coding agents (Claude Code, Codex
+  and others) started straight from a shell, over the same SSH and mosh.
 - **Merge phase 2 into `main`.** Phase 2 passes a fresh clone, the tests and use on a phone.
 - **Approval notifications (Android).** A foreground service keeps the SSH connection open, watches
   herdr's events and notifies when an agent needs approval, even with the app in the background.

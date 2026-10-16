@@ -1,4 +1,4 @@
-import { tabName, type Agent, type Pane, type Tab, type Workspace } from "@corral/core";
+import { tabName, type Agent, type Pane, type Tab, type Workspace } from "@moshlet/core";
 import { ChevronDown, History, LayoutGrid, Menu, Plus } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, View } from "react-native";

@@ -1,7 +1,7 @@
-import { base64Decode, type UdpTransport } from "@corral/core";
+import { base64Decode, type UdpTransport } from "@moshlet/core";
 import { requireOptionalNativeModule, type EventSubscription } from "expo-modules-core";
 
-interface CorralNativeModule {
+interface MoshletNativeModule {
   udpOpen(host: string, port: number): number;
   udpSend(id: number, data: Uint8Array): void;
   udpClose(id: number): void;
@@ -9,7 +9,7 @@ interface CorralNativeModule {
   addListener(event: "onDatagram", cb: (e: { id: number; data: string }) => void): EventSubscription;
 }
 
-const native = requireOptionalNativeModule<CorralNativeModule>("CorralNative");
+const native = requireOptionalNativeModule<MoshletNativeModule>("MoshletNative");
 
 const handlers = new Map<number, (d: Uint8Array) => void>();
 native?.addListener("onDatagram", (e) => handlers.get(e.id)?.(base64Decode(e.data)));
