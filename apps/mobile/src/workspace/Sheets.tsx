@@ -156,7 +156,7 @@ export const PaneMapSheet = forwardRef<
     <BottomSheetModal ref={ref} {...sheetProps}>
       <BottomSheetScrollView contentContainerStyle={SHEET}>
         <Text className="font-bold text-[21px]">Panes</Text>
-        <View className="rounded-lg border border-border bg-terminal" style={{ height: mapHeight }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        <View className="rounded-lg border border-border bg-background" style={{ height: mapHeight }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
           {scale > 0 &&
             (layout?.panes ?? []).map((lp, i) => {
               const pane = panes.find((p) => p.pane_id === lp.pane_id);
