@@ -7,8 +7,8 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { useCSSVariable } from "uniwind";
-import { loadTheme } from "../lib/appearance";
+import { useCSSVariable, useUniwind } from "uniwind";
+import { isLight, loadTheme } from "../lib/appearance";
 import { loadHosts } from "../lib/hosts";
 import { useApp } from "../lib/store";
 import { FONT_FILES } from "../theme";
@@ -22,6 +22,7 @@ export default function RootLayout() {
   const hostsLoaded = useApp((s) => s.hostsLoaded);
   const [themeLoaded, setThemeLoaded] = useState(false);
   const ground = useCSSVariable("--color-background") as string;
+  const { theme } = useUniwind();
 
   useEffect(() => {
     void loadHosts().then((hosts) => useApp.setState({ hosts, hostsLoaded: true }));
@@ -37,7 +38,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView className="flex-1 bg-background">
       <BottomSheetModalProvider>
-        <StatusBar style="light" />
+        <StatusBar style={isLight(theme) ? "dark" : "light"} />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: ground }, animation: "fade" }} />
         <Toast />
         <ConfirmDialog />

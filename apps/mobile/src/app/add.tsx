@@ -478,10 +478,10 @@ function Command({ text, onCopy }: { text: string; onCopy: (t: string) => void }
       accessibilityLabel={`Copy ${text}`}
       className="flex-row items-center gap-2.5 rounded-md border border-terminal-border bg-terminal px-3 py-2.5 active:opacity-70"
     >
-      <Text className="flex-1 font-mono text-[13px] leading-[19px]" selectable>
+      <Text className="flex-1 font-mono text-[13px] leading-[19px] text-term-fg" selectable>
         {text}
       </Text>
-      <Icon as={Copy} size={15} className="text-muted-foreground" />
+      <Icon as={Copy} size={15} className="text-term-7" />
     </Pressable>
   );
 }

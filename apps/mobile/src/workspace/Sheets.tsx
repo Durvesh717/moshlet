@@ -75,7 +75,7 @@ export const ApprovalSheet = forwardRef<
             {prompt.question.length > 0 && (
               <View className="gap-1 rounded-lg border border-border bg-terminal p-3.5">
                 {prompt.question.map((l, i) => (
-                  <Text key={i} className="font-mono text-[13px]" numberOfLines={2}>
+                  <Text key={i} className="font-mono text-[13px] text-term-fg" numberOfLines={2}>
                     {l}
                   </Text>
                 ))}
