@@ -30,10 +30,7 @@ a device, delete its line from `~/.ssh/authorized_keys` on the computer.
 
 ## Plan
 
-1. Core, tested against a real mosh-server, sshd and herdr from Node
-2. Expo app on Android
-3. iOS and iPad (EAS builds), iPad layout and hardware keyboards
-4. Polish
+Done: the core and the Android app. What comes next, and ideas, are in [ROADMAP.md](ROADMAP.md).
 
 ## Development
 
