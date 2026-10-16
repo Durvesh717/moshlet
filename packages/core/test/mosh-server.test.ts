@@ -81,18 +81,6 @@ describe.skipIf(!haveMosh)("MoshClient against mosh-server", () => {
     await client.close();
   });
 
-  it("reports input as echoed once its output is on the screen", async () => {
-    const { port, key } = await startServer("/usr/bin/env", "PS1=$ ", "/bin/sh");
-    const client = new MoshClient({ host: "127.0.0.1", port, key, cols: 60, rows: 20, transport: nodeUdp });
-    await until(client, "prompt", (s) => s.text().includes("$"));
-    client.write(utf8Encode("echo echoed$((40+2))\r"));
-    const sent = client.inputEvents;
-    expect(client.echoedInputs).toBeLessThan(sent);
-    const s = await until(client, "echo ack", () => client.echoedInputs >= sent);
-    expect(s.text()).toContain("echoed42");
-    await client.close();
-  });
-
   it("reassembles large multi-fragment screens", async () => {
     const { port, key } = await startServer("/usr/bin/env", "PS1=$ ", "/bin/sh");
     const client = new MoshClient({ host: "127.0.0.1", port, key, cols: 200, rows: 60, transport: nodeUdp });

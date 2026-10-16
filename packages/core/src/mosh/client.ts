@@ -104,16 +104,6 @@ export class MoshClient {
     return () => this.linkListeners.delete(cb);
   }
 
-  /** Writes queued so far (with resizes): note it after a write to know when the server has acted on it. */
-  get inputEvents(): number {
-    return this.protocol.inputEvents;
-  }
-
-  /** Writes the server has applied and waited 50 ms after, so their output is on screen (mosh's echo ack). */
-  get echoedInputs(): number {
-    return this.protocol.echoedInputs;
-  }
-
   write(bytes: Uint8Array): void {
     if (bytes.length === 0 || this.closedReason) return;
     this.protocol.queue({ kind: "keys", bytes }, this.clock());
