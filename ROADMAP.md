@@ -5,10 +5,10 @@
 1. **Core**: mosh protocol, terminal emulator and herdr API types, tested against a real
    mosh-server, sshd and herdr from Node.
 2. **Android app**: SSH sign-in with a key kept on the device (guided setup, nothing installed on
-   the computer), panes over mosh, sidebar of agents, workspaces, tabs and panes, approvals,
-   History, dictation. UI built from React Native Reusables (shadcn) on Uniwind, with seven themes:
-   Moshlet Cobalt (the default), Moshlet Glacier, Moshlet Daylight, Catppuccin, Gruvbox, Kanagawa
-   and Black & White.
+   the computer), panes over mosh, sidebar of agents (each with its maker's mark), workspaces, tabs
+   and panes, approvals, History, dictation. UI built from React Native Reusables (shadcn) on
+   Uniwind, with seven themes in Settings: Moshlet Cobalt (the default), Moshlet Glacier, Moshlet
+   Daylight, Catppuccin, Gruvbox, Kanagawa and Black & White.
 
 ## Next (not yet scheduled)
 

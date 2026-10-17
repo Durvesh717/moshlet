@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import type { ConnState } from "../lib/store";
+import { AgentLogo } from "../ui/AgentLogo";
 import { Pill, SectionLabel, StatusGlyph, statusLabel } from "../ui/kit";
 import { LinkIndicator, shortCwd } from "./TopBar";
 
@@ -119,7 +120,12 @@ export function Sidebar(props: {
             >
               <StatusGlyph status={a.agent_status} size={16} />
               <View className="flex-1 gap-0.5">
-                <Text className="font-semibold text-base">{agentName(a)}</Text>
+                <View className="flex-row items-center gap-1.5">
+                  <AgentLogo kind={a.agent} size={15} />
+                  <Text className="shrink font-semibold text-base" numberOfLines={1}>
+                    {agentName(a)}
+                  </Text>
+                </View>
                 {!!a.terminal_title_stripped && (
                   <Text className="text-[13px] text-muted-foreground" numberOfLines={1}>
                     {a.terminal_title_stripped}
