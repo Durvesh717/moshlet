@@ -1,5 +1,6 @@
 import type { Cell, Link, MoshClient, SessionInfo, Snapshot } from "@moshlet/core";
 import { create } from "zustand";
+import { FONT_SIZE, type TerminalFont } from "../theme";
 import type { Host } from "./hosts";
 
 export type ConnState =
@@ -36,6 +37,7 @@ export interface AppState {
   scrollback: (readonly Cell[])[];
   historyMode: boolean;
   fontSize: number;
+  termFont: TerminalFont;
   toast: { id: number; text: string } | null;
 }
 
@@ -54,7 +56,8 @@ export const useApp = create<AppState>(() => ({
   link: null,
   scrollback: [],
   historyMode: false,
-  fontSize: 12,
+  fontSize: FONT_SIZE.default,
+  termFont: "JetBrains Mono",
   toast: null,
 }));
 

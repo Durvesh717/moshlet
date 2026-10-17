@@ -15,11 +15,13 @@ import { resolveColor, type Palette } from "./palette";
 export interface TerminalFonts {
   regular: SkTypeface;
   bold: SkTypeface;
-  /** For the symbols JetBrains Mono lacks (⏵ ⏸ ✻ ℹ ...). */
+  /** For the symbols the font lacks (⏵ ⏸ ✻ ℹ ...). */
   symRegular: SkTypeface;
   symBold: SkTypeface;
-  /** Both families, for paragraphs (emoji and anything else falls back to the system fonts). */
+  /** The terminal fonts, for paragraphs (emoji and anything else falls back to the system fonts). */
   provider: SkTypefaceFontProvider | null;
+  /** The provider's families to try, in order: the font, then JetBrains Mono for icons, then Adwaita Mono. */
+  families: string[];
 }
 
 export interface Frame {
@@ -34,7 +36,6 @@ export interface Frame {
 }
 
 const VS16 = "\ufe0f";
-const TEXT_FAMILIES = ["JetBrains Mono", "Adwaita Mono"];
 /**
  * The system colour emoji. iOS names its family; Android's is reachable only through fallback,
  * which the emoji script locale steers to it.
@@ -320,7 +321,7 @@ export class Renderer {
         color: this.color(fg),
         fontSize: this.fontSize,
         // The bundled fonts have text forms of many emoji (⚠ ℹ), but VS16 asks for the colour form.
-        ...(text.includes(VS16) ? EMOJI_STYLE : { fontFamilies: TEXT_FAMILIES }),
+        ...(text.includes(VS16) ? EMOJI_STYLE : { fontFamilies: this.fonts.families }),
         fontStyle: { weight: has(style, Attr.BOLD) ? 700 : 400 },
       });
       builder.addText(text);

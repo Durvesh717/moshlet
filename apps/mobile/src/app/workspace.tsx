@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCSSVariable } from "uniwind";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
+import { setFontSize } from "../lib/appearance";
 import { activeSession, closeHost } from "../lib/session";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
@@ -38,6 +39,7 @@ export default function WorkspaceScreen() {
       historyMode: st.historyMode,
       scrollback: st.scrollback,
       fontSize: st.fontSize,
+      termFont: st.termFont,
       attaching: st.attaching,
       attachError: st.attachError,
       linkClosed: st.link?.closed ?? null,
@@ -186,6 +188,7 @@ export default function WorkspaceScreen() {
             paneKey={s.paneId}
             history={s.scrollback}
             historyMode={s.historyMode}
+            font={s.termFont}
             fontSize={s.fontSize}
             rowsPerNotch={pane && appOwnsScroll(pane) ? 1 : 3}
             ctrl={ctrl}
@@ -198,7 +201,7 @@ export default function WorkspaceScreen() {
             onGrid={(c, r) => session.setGrid(c, r)}
             onSwipe={swipe}
             onLongPress={() => paneMap.current?.present()}
-            onFontSize={(size) => useApp.setState({ fontSize: size })}
+            onFontSize={setFontSize}
             onLeaveHistory={() => session.closeHistory()}
             onRemoteScroll={(n) => {
               session.remoteNotches = n;

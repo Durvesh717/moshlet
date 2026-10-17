@@ -8,7 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useCSSVariable, useUniwind } from "uniwind";
-import { isLight, loadTheme } from "../lib/appearance";
+import { isLight, loadAppearance } from "../lib/appearance";
 import { loadHosts } from "../lib/hosts";
 import { useApp } from "../lib/store";
 import { FONT_FILES } from "../theme";
@@ -26,7 +26,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     void loadHosts().then((hosts) => useApp.setState({ hosts, hostsLoaded: true }));
-    void loadTheme().then(() => setThemeLoaded(true));
+    void loadAppearance().then(() => setThemeLoaded(true));
   }, []);
 
   const ready = fontsLoaded && hostsLoaded && themeLoaded;

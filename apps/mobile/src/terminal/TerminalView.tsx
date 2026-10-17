@@ -6,7 +6,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSharedValue } from "react-native-reanimated";
 import { useCSSVariable } from "uniwind";
 import { overTerminal } from "../lib/overlay";
-import { TERMINAL_FONTS } from "../theme";
+import { TERMINAL_FONTS, type TerminalFont } from "../theme";
 import { hexColor, makePalette, type Palette } from "./palette";
 import { Renderer } from "./renderer";
 
@@ -24,6 +24,7 @@ export interface TerminalViewProps {
   paneKey: string | null;
   history: readonly (readonly Cell[])[];
   historyMode: boolean;
+  font: TerminalFont;
   fontSize: number;
   /** Rows a wheel notch moves the content: herdr's own history 3, Claude Code and similar apps 1. */
   rowsPerNotch: number;
@@ -72,14 +73,18 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   p.current = props;
 
   // ---- fonts and renderer
-  const regular = useTypeface(TERMINAL_FONTS["JetBrains Mono"][0]);
-  const bold = useTypeface(TERMINAL_FONTS["JetBrains Mono"][1]);
+  const regular = useTypeface(TERMINAL_FONTS[props.font][0]);
+  const bold = useTypeface(TERMINAL_FONTS[props.font][1]);
   const symRegular = useTypeface(TERMINAL_FONTS["Adwaita Mono"][0]);
   const symBold = useTypeface(TERMINAL_FONTS["Adwaita Mono"][1]);
   const provider = useFonts(TERMINAL_FONTS);
   const palette = useTerminalPalette();
   const renderer = useMemo(
-    () => (regular && bold && symRegular && symBold ? new Renderer({ regular, bold, symRegular, symBold, provider }, props.fontSize, PixelRatio.get(), palette) : null),
+    () => {
+      if (!regular || !bold || !symRegular || !symBold) return null;
+      const families = [...new Set([props.font, "JetBrains Mono", "Adwaita Mono"])];
+      return new Renderer({ regular, bold, symRegular, symBold, provider, families }, props.fontSize, PixelRatio.get(), palette);
+    },
     // The font size and colors are applied separately: pinching or a new theme don't rebuild the renderer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [regular, bold, symRegular, symBold, provider],

@@ -7,8 +7,9 @@
 2. **Android app**: SSH sign-in with a key kept on the device (guided setup, nothing installed on
    the computer), panes over mosh, sidebar of agents (each with its maker's mark), workspaces, tabs
    and panes, approvals, History, dictation. UI built from React Native Reusables (shadcn) on
-   Uniwind, with seven themes in Settings: Moshlet Cobalt (the default), Moshlet Glacier, Moshlet
-   Daylight, Catppuccin, Gruvbox, Kanagawa and Black & White.
+   Uniwind. Settings: seven themes (Moshlet Cobalt, the default, Moshlet Glacier, Moshlet Daylight,
+   Catppuccin, Gruvbox, Kanagawa and Black & White), seven terminal fonts and the text size (also
+   set by pinching), kept between launches.
 
 ## Next (not yet scheduled)
 
@@ -21,7 +22,6 @@
   herdr's events and notifies when an agent needs approval, even with the app in the background.
   Tapping the notification opens that pane.
 - **Polish**
-  - Remember the font size set by pinching (it resets on every launch).
   - Check the sidebar scrolls in landscape on a phone (not reproducible on the emulator).
 - **iOS and iPad**
   - An iOS native module for SSH and the device key (for example swift-nio-ssh or Citadel, with the
