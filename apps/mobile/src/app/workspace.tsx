@@ -17,7 +17,7 @@ import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView"
 import { confirm } from "../ui/Confirm";
 import { Pill, StatusGlyph } from "../ui/kit";
 import { Composer, KeyBar } from "../workspace/KeyBar";
-import { ApprovalSheet, PaneMapSheet, TextPromptSheet, useTextPrompt } from "../workspace/Sheets";
+import { ApprovalSheet, PaneMapSheet, TextPromptSheet, useTextPrompt, type ApprovalSheetHandle } from "../workspace/Sheets";
 import { Sidebar } from "../workspace/Sidebar";
 import { TopBar } from "../workspace/TopBar";
 
@@ -54,7 +54,7 @@ export default function WorkspaceScreen() {
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
   const term = useRef<TerminalViewHandle>(null);
-  const approval = useRef<BottomSheetModal>(null);
+  const approval = useRef<ApprovalSheetHandle>(null);
   const paneMap = useRef<BottomSheetModal>(null);
   const prompt = useTextPrompt();
 
@@ -86,11 +86,14 @@ export default function WorkspaceScreen() {
   const paneIndex = panesInTab.findIndex((p) => p.pane_id === s.paneId) + 1;
   const blockedElsewhere = snap?.agents.filter((a) => a.agent_status === "blocked" && a.pane_id !== s.paneId).length ?? 0;
 
-  // Open the approval sheet once when the pane on screen starts needing approval.
+  // Open the approval sheet once when the pane on screen starts needing approval, and close it
+  // when it no longer does (answered on the computer, or the agent quit): its buttons would type
+  // into whatever is there now.
   const lastStatus = useRef<string | undefined>(undefined);
   useEffect(() => {
     const st = agent?.agent_status;
-    if (st === "blocked" && lastStatus.current !== undefined && lastStatus.current !== "blocked") approval.current?.present();
+    if (st === "blocked" && lastStatus.current !== undefined && lastStatus.current !== "blocked") approval.current?.open();
+    else if (st !== "blocked" && lastStatus.current === "blocked") approval.current?.close();
     lastStatus.current = st;
   }, [agent?.agent_status, s.paneId]);
 
@@ -213,7 +216,7 @@ export default function WorkspaceScreen() {
           {agent?.agent_status === "blocked" && (
             <Pill
               label="Needs approval"
-              onPress={() => approval.current?.present()}
+              onPress={() => approval.current?.open()}
               height={34}
               tone="warning"
               leading={<StatusGlyph status="blocked" size={12} />}
@@ -289,11 +292,11 @@ export default function WorkspaceScreen() {
         read={() => (pane ? session.readVisible(pane.pane_id) : Promise.resolve(""))}
         onChoose={(keys) => {
           if (pane) session.sendKeys(pane.pane_id, keys);
-          approval.current?.dismiss();
+          approval.current?.close();
         }}
         onReply={(text) => {
           session.submit(text);
-          approval.current?.dismiss();
+          approval.current?.close();
         }}
       />
       <PaneMapSheet

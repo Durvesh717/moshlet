@@ -1,7 +1,7 @@
 import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@moshlet/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2, type LucideIcon } from "lucide-react-native";
-import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
@@ -40,24 +40,62 @@ function useSheetInputStyle() {
   };
 }
 
-/** The agent's approval dialog, read off its screen, as big buttons; plus a reply box. */
+export interface ApprovalSheetHandle {
+  /** Reads the dialog, then shows the sheet; already showing, it reads it again. */
+  open(): void;
+  close(): void;
+}
+
+/** Past this, a slow read opens the sheet loading rather than not at all. */
+const SLOW_READ_MS = 500;
+
+/**
+ * The agent's approval dialog, read off its screen, as big buttons; plus a reply box. It reads
+ * before it opens, so it slides up once at its final height (sized to the content, it would grow
+ * as the read landed, and showed the last dialog's buttons until then).
+ */
 export const ApprovalSheet = forwardRef<
-  BottomSheetModal,
+  ApprovalSheetHandle,
   { agentName: string; where: string; read(): Promise<string>; onChoose(keys: string[]): void; onReply(text: string): void }
 >(function ApprovalSheet(props, ref) {
   const sheetProps = useSheetProps();
   const input = useSheetInputStyle();
   const [prompt, setPrompt] = useState<ApprovalPrompt | null>(null);
   const [reply, setReply] = useState("");
-  const { read } = props;
-  const load = useCallback(() => {
-    setPrompt(null);
-    void read()
-      .then((text) => setPrompt(parseApproval(text)))
-      .catch(() => setPrompt(parseApproval("")));
-  }, [read]);
+  const sheet = useRef<BottomSheetModal>(null);
+  const shown = useRef(false);
+  const reads = useRef(0);
+  const read = useRef(props.read);
+  read.current = props.read;
+
+  useImperativeHandle(ref, () => ({
+    open() {
+      const n = ++reads.current;
+      const show = () => {
+        if (n !== reads.current || shown.current) return;
+        shown.current = true;
+        sheet.current?.present();
+      };
+      if (!shown.current) setPrompt(null);
+      const slow = setTimeout(show, SLOW_READ_MS);
+      void read
+        .current()
+        .then(parseApproval, () => parseApproval(""))
+        .then((p) => {
+          clearTimeout(slow);
+          if (n !== reads.current) return;
+          setPrompt(p);
+          show();
+        });
+    },
+    close() {
+      reads.current++;
+      sheet.current?.dismiss();
+    },
+  }));
+
   return (
-    <BottomSheetModal ref={ref} {...sheetProps} onChange={(i) => i >= 0 && load()}>
+    <BottomSheetModal ref={sheet} {...sheetProps} onDismiss={() => (shown.current = false)}>
       <BottomSheetScrollView contentContainerStyle={SHEET}>
         <View className="mb-1 flex-row items-center gap-3.5">
           <View className="size-[52px] items-center justify-center rounded-2xl bg-warning-muted">
