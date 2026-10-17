@@ -1,5 +1,5 @@
 import { agentIn, appOwnsScroll, orderedPanes, primaryPane, tabName, tabsOf } from "@moshlet/core";
-import type { BottomSheetModal } from "@gorhom/bottom-sheet";
+import { useBottomSheetModal, type BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
@@ -67,15 +67,17 @@ export default function WorkspaceScreen() {
     };
   }, []);
 
-  // Android back: close the prompt box, then the drawer; otherwise open the drawer.
+  // Android back: close an open sheet, then the prompt box, then the drawer; otherwise open the drawer.
+  const sheets = useBottomSheetModal();
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (sheets.dismiss()) return true;
       if (composing) setComposing(false);
       else setDrawerOpen(!drawerOpen);
       return true;
     });
     return () => sub.remove();
-  }, [composing, drawerOpen]);
+  }, [composing, drawerOpen, sheets]);
 
   const snap = s.snapshot;
   const pane = snap?.panes.find((p) => p.pane_id === s.paneId);
