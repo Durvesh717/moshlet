@@ -1,21 +1,17 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, Monitor, Plus, Trash2 } from "lucide-react-native";
+import { ChevronRight, Monitor, Plus, Settings, Trash2 } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ScopedTheme, useUniwind } from "uniwind";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Icon } from "@/components/ui/icon";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Text } from "@/components/ui/text";
-import { cn } from "@/lib/utils";
-import { setTheme, THEMES, type ThemeId } from "../lib/appearance";
 import { hostLabel, saveHosts, type Host } from "../lib/hosts";
 import { openHost } from "../lib/session";
 import { toast, useApp } from "../lib/store";
 import { unlock } from "../lib/unlock";
 import { confirm } from "../ui/Confirm";
-import { SectionLabel } from "../ui/kit";
+import { IconButton, SectionLabel } from "../ui/kit";
 import { Logo } from "../ui/Logo";
 
 export default function Hosts() {
@@ -57,10 +53,11 @@ export default function Hosts() {
     >
       <View className="mb-[18px] flex-row items-center gap-4">
         <Logo size={56} />
-        <View>
+        <View className="flex-1">
           <Text className="font-bold text-[30px]">Moshlet</Text>
           <Text className="text-[15px] text-muted-foreground">your coding agents, in your pocket</Text>
         </View>
+        <IconButton icon={Settings} label="Settings" onPress={() => router.push("/settings")} />
       </View>
 
       <SectionLabel>Computers</SectionLabel>
@@ -105,43 +102,6 @@ export default function Hosts() {
           <Text className="text-[13px] text-faint">Long-press a computer to forget it.</Text>
         </View>
       )}
-
-      <View className="mt-4 gap-3.5">
-        <SectionLabel>Theme</SectionLabel>
-        <ThemePicker />
-      </View>
     </ScrollView>
-  );
-}
-
-/** Each choice is drawn in its own theme, so it previews itself. */
-function ThemePicker() {
-  const { theme } = useUniwind();
-  return (
-    <RadioGroup value={theme} onValueChange={(v) => setTheme(v as ThemeId)} className="gap-2.5">
-      {THEMES.map((t) => {
-        const selected = theme === t.id;
-        return (
-          <ScopedTheme key={t.id} theme={t.id}>
-            <Pressable
-              onPress={() => setTheme(t.id)}
-              accessibilityLabel={`${t.label} theme`}
-              className={cn("flex-row items-center gap-3.5 rounded-xl border-2 bg-background p-3 active:opacity-80", selected ? "border-brand" : "border-border-strong")}
-            >
-              <RadioGroupItem value={t.id} aria-label={t.label} className="size-5 border-border-strong" />
-              <View className="flex-1 gap-0.5">
-                <Text className="font-medium text-[15px]">{t.label}</Text>
-                <Text className="text-xs text-muted-foreground">{t.note}</Text>
-              </View>
-              <View className="h-9 w-24 flex-row items-end gap-1 rounded-md bg-terminal p-1.5">
-                <View className="h-2 flex-1 rounded-sm bg-primary" />
-                <View className="size-2 rounded-sm bg-success" />
-                <View className="size-2 rounded-sm bg-warning" />
-              </View>
-            </Pressable>
-          </ScopedTheme>
-        );
-      })}
-    </RadioGroup>
   );
 }
