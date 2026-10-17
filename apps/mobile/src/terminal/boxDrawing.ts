@@ -26,6 +26,13 @@ const LINES = new Map<number, number>([
   [0x2578, L | HEAVY], [0x2579, U | HEAVY], [0x257a, R | HEAVY], [0x257b, D | HEAVY],
 ]);
 
+// Quadrants, U+2596 to U+259F: ▖ ▗ ▘ ▙ ▚ ▛ ▜ ▝ ▞ ▟
+const UL = 1;
+const UR = 2;
+const LL = 4;
+const LR = 8;
+const QUADRANTS = [LL, LR, UL, UL | LL | LR, UL | LR, UL | UR | LL, UL | UR | LR, UR, UR | LL, UR | LL | LR];
+
 export const isBoxChar = (cp: number): boolean => cp >= 0x2500 && cp <= 0x259f;
 
 export function drawBox(canvas: SkCanvas, cp: number, x: number, y: number, w: number, h: number, paint: SkPaint, thin: number, snap: (v: number) => number): boolean {
@@ -59,6 +66,17 @@ export function drawBox(canvas: SkCanvas, cp: number, x: number, y: number, w: n
     paint.setAlphaf((a * (cp - 0x2590)) / 4);
     fill(x, y, x + w, y + h);
     paint.setAlphaf(a);
+  } else if (cp === 0x2594) fill(x, y, x + w, y + h / 8);
+  else if (cp === 0x2595) fill(x + (w * 7) / 8, y, x + w, y + h);
+  else if (cp >= 0x2596 && cp <= 0x259f) {
+    // Claude Code draws its mascot with these.
+    const q = QUADRANTS[cp - 0x2596];
+    const mx = x + w / 2;
+    const my = y + h / 2;
+    if (q & UL) fill(x, y, mx, my);
+    if (q & UR) fill(mx, y, x + w, my);
+    if (q & LL) fill(x, my, mx, y + h);
+    if (q & LR) fill(mx, my, x + w, y + h);
   } else return false;
   return true;
 }
