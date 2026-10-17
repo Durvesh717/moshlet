@@ -38,6 +38,8 @@ export interface AppState {
   historyMode: boolean;
   fontSize: number;
   termFont: TerminalFont;
+  /** Approval alerts (Settings): notify when an agent needs you while Moshlet is in the background. */
+  alerts: boolean;
   toast: { id: number; text: string } | null;
 }
 
@@ -58,6 +60,7 @@ export const useApp = create<AppState>(() => ({
   historyMode: false,
   fontSize: FONT_SIZE.default,
   termFont: "JetBrains Mono",
+  alerts: false,
   toast: null,
 }));
 

@@ -10,6 +10,9 @@
    Uniwind. Settings: seven themes (Moshlet Cobalt, the default, Moshlet Glacier, Moshlet Daylight,
    Catppuccin, Gruvbox, Kanagawa and Black & White), seven terminal fonts and the text size (also
    set by pinching), kept between launches.
+3. **Approval alerts (Android)**: a Settings switch. While a computer is open, a foreground service
+   keeps the connection open and Moshlet notifies when an agent needs approval (with the question
+   read off its screen), even with the phone locked; tapping the notification opens that pane.
 
 ## Next (not yet scheduled)
 
@@ -18,9 +21,6 @@
 - **Beyond herdr.** tmux sessions, plain terminals, and single coding agents (Claude Code, Codex
   and others) started straight from a shell, over the same SSH and mosh.
 - **Merge phase 2 into `main`.** Phase 2 passes a fresh clone, the tests and use on a phone.
-- **Approval notifications (Android).** A foreground service keeps the SSH connection open, watches
-  herdr's events and notifies when an agent needs approval, even with the app in the background.
-  Tapping the notification opens that pane.
 - **Polish**
   - Check the sidebar scrolls in landscape on a phone (not reproducible on the emulator).
 - **iOS and iPad**

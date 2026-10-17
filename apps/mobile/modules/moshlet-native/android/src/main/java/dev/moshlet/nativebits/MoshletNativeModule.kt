@@ -3,6 +3,8 @@ package dev.moshlet.nativebits
 import android.content.Context
 import android.net.wifi.WifiManager
 import android.util.Base64
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.typedarray.Uint8Array
@@ -17,8 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /**
- * The few things JavaScript can't do on Android: UDP sockets for mosh, and the Wi-Fi
- * low-latency lock (without it the radio naps between packets, adding 100-400 ms).
+ * The few things JavaScript can't do on Android: UDP sockets for mosh, the Wi-Fi low-latency
+ * lock (without it the radio naps between packets, adding 100-400 ms), and approval alerts.
  */
 class MoshletNativeModule : Module() {
   private class Sock(val socket: DatagramSocket, val peer: InetSocketAddress)
@@ -31,7 +33,12 @@ class MoshletNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("MoshletNative")
 
-    Events("onDatagram")
+    Events("onDatagram", "onWatchTick", "onOpenPane")
+
+    OnCreate {
+      WatchService.onTick = { sendEvent("onWatchTick", emptyMap<String, Any>()) }
+      OpenRequests.onReceived = { sendEvent("onOpenPane", emptyMap<String, Any>()) }
+    }
 
     /** Opens a socket aimed at host:port (an IP literal); datagrams from that peer arrive as onDatagram events. */
     Function("udpOpen") { host: String, port: Int ->
@@ -90,7 +97,58 @@ class MoshletNativeModule : Module() {
       }
     }
 
+    /** Keeps the app running in the background for approval alerts, with an ongoing notification saying so. */
+    Function("watchStart") { title: String, text: String ->
+      val context = appContext.reactContext?.applicationContext ?: return@Function
+      WatchService.start(context, title, text)
+    }
+
+    Function("watchStop") {
+      appContext.reactContext?.applicationContext?.let { WatchService.stop(it) }
+    }
+
+    /** An agent needs approval: a notification that opens its pane, one per key (computer and pane). */
+    Function("notifyApproval") { key: String, title: String, text: String, subText: String, host: String, pane: String ->
+      val context = appContext.reactContext?.applicationContext ?: return@Function
+      WatchService.ensureChannels(context)
+      val notification = NotificationCompat.Builder(context, WatchService.CHANNEL_APPROVALS)
+        .setSmallIcon(R.drawable.moshlet_notification)
+        .setColor(0xFF1F5EFF.toInt())
+        .setContentTitle(title)
+        .setContentText(text)
+        .setSubText(subText)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .setContentIntent(WatchService.openApp(context, key.hashCode(), host, pane))
+        .build()
+      try {
+        NotificationManagerCompat.from(context).notify(key, 0, notification)
+      } catch (_: SecurityException) {
+        // Notifications were turned off in Android's settings.
+      }
+    }
+
+    Function("cancelApproval") { key: String ->
+      val context = appContext.reactContext?.applicationContext ?: return@Function
+      NotificationManagerCompat.from(context).cancel(key, 0)
+    }
+
+    Function("notificationsAllowed") {
+      val context = appContext.reactContext?.applicationContext ?: return@Function false
+      NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+
+    /** The pane a tapped approval notification asked for, once. */
+    Function("takeOpenRequest") {
+      OpenRequests.take()
+    }
+
     OnDestroy {
+      WatchService.onTick = null
+      OpenRequests.onReceived = null
+      appContext.reactContext?.applicationContext?.let { WatchService.stop(it) }
       sockets.values.forEach { it.socket.close() }
       sockets.clear()
       wifiLock?.takeIf { it.isHeld }?.release()

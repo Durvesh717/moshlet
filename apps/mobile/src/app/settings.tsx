@@ -1,12 +1,15 @@
 import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
-import { ArrowLeft, Minus, Plus } from "lucide-react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { ArrowLeft, BellRing, Minus, Plus } from "lucide-react-native";
+import { Pressable, ScrollView, Switch, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScopedTheme, useUniwind } from "uniwind";
+import { Icon } from "@/components/ui/icon";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Text } from "@/components/ui/text";
+import { useColors } from "@/lib/colors";
 import { cn } from "@/lib/utils";
+import { alertsSupported, setAlerts } from "../lib/alerts";
 import { setFontSize, setTerminalFont, setTheme, THEMES, type ThemeId } from "../lib/appearance";
 import { useApp } from "../lib/store";
 import { FONT_SIZE, TERMINAL_FONTS, type TerminalFont } from "../theme";
@@ -32,8 +35,13 @@ export default function Settings() {
           <Text className="font-bold text-[22px]">Settings</Text>
         </View>
 
-        <SectionLabel>Theme</SectionLabel>
-        <ThemePicker />
+        <SectionLabel>Notifications</SectionLabel>
+        <Alerts />
+
+        <View className="mt-5 gap-3.5">
+          <SectionLabel>Theme</SectionLabel>
+          <ThemePicker />
+        </View>
 
         <View className="mt-5 gap-3.5">
           <SectionLabel>Terminal text size</SectionLabel>
@@ -48,6 +56,36 @@ export default function Settings() {
       {/* Text scrolling up shouldn't run under the status bar. */}
       <View pointerEvents="none" className="absolute left-0 right-0 top-0 bg-background" style={{ height: insets.top }} />
     </View>
+  );
+}
+
+function Alerts() {
+  const on = useApp((s) => s.alerts);
+  const c = useColors();
+  return (
+    <Pressable
+      disabled={!alertsSupported}
+      onPress={() => void setAlerts(!on)}
+      className="flex-row items-center gap-3.5 rounded-xl border border-border-strong bg-card p-4 active:opacity-80"
+    >
+      <View className="size-10 items-center justify-center rounded-lg bg-secondary">
+        <Icon as={BellRing} size={20} className={on ? "text-brand" : "text-muted-foreground"} />
+      </View>
+      <View className="flex-1 gap-1">
+        <Text className="font-medium text-[15px]">Approval alerts</Text>
+        <Text className="text-[13px] leading-[18px] text-muted-foreground">
+          {alertsSupported ? "Get notified when an agent needs you, even with the phone locked." : "On Android for now."}
+        </Text>
+      </View>
+      <Switch
+        value={on}
+        disabled={!alertsSupported}
+        onValueChange={(v) => void setAlerts(v)}
+        trackColor={{ false: c.borderStrong, true: c.brand }}
+        thumbColor={c.foreground}
+        accessibilityLabel="Approval alerts"
+      />
+    </Pressable>
   );
 }
 

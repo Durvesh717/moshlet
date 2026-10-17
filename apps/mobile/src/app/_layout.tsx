@@ -8,6 +8,8 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useCSSVariable, useUniwind } from "uniwind";
+import { alerts } from "../../modules/moshlet-native";
+import { loadAlerts, openFromAlert } from "../lib/alerts";
 import { isLight, loadAppearance } from "../lib/appearance";
 import { loadHosts } from "../lib/hosts";
 import { useApp } from "../lib/store";
@@ -26,12 +28,21 @@ export default function RootLayout() {
 
   useEffect(() => {
     void loadHosts().then((hosts) => useApp.setState({ hosts, hostsLoaded: true }));
-    void loadAppearance().then(() => setThemeLoaded(true));
+    void Promise.all([loadAppearance(), loadAlerts()]).then(() => setThemeLoaded(true));
   }, []);
 
   const ready = fontsLoaded && hostsLoaded && themeLoaded;
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
+    if (!ready) return;
+    void SplashScreen.hideAsync();
+    // A tapped approval notification: the one that started the app, then any while it runs.
+    const take = () => {
+      const r = alerts.takeOpenRequest();
+      if (r) void openFromAlert(r);
+    };
+    take();
+    const sub = alerts.onOpen(take);
+    return () => sub?.remove();
   }, [ready]);
 
   if (!ready) return null;

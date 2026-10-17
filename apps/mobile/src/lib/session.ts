@@ -9,7 +9,10 @@ import {
   Sealer,
   STALE_AFTER_MS,
   agentIn,
+  agentName,
+  parseApproval,
   primaryPane,
+  tabName,
   tabsOf,
   type Link,
   type Snapshot,
@@ -17,7 +20,7 @@ import {
 } from "@moshlet/core";
 import { AppState, type AppStateStatus } from "react-native";
 import * as Network from "expo-network";
-import { nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-native";
+import { alerts, nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-native";
 import type { SshConnection } from "../../modules/moshlet-native/ssh";
 import { saveHosts, type Host } from "./hosts";
 import { deviceIdentity, signIn, SignInError } from "./ssh";
@@ -67,6 +70,8 @@ export class HostSession {
   private lastAutoReattach = 0;
   private foreground = AppState.currentState === "active";
   private subs: { remove(): void }[] = [];
+  /** Approval notifications showing, by key, with their panes. */
+  private alerted = new Map<string, string>();
   /** Wheel notches the live pane is scrolled up by (reported by the terminal view). */
   remoteNotches = 0;
 
@@ -75,6 +80,9 @@ export class HostSession {
     set({ activeHostId: host.id, session: host.session, snapshot: null, paneId: null, terminal: null, sessions: [], conn: { kind: "connecting" } });
     this.subs.push(AppState.addEventListener("change", (s) => this.onAppState(s)));
     this.subs.push(Network.addNetworkStateListener(() => this.networkChanged()));
+    const tick = alerts.onTick(() => this.onWatchTick());
+    if (tick) this.subs.push(tick);
+    this.syncWatch();
     this.healthTimer = setInterval(() => this.checkTerminalHealth(), 5000);
     if (this.foreground) setLowLatencyWifi(true);
     void this.connect();
@@ -210,6 +218,8 @@ export class HostSession {
 
   async close(): Promise<void> {
     this.closed = true;
+    alerts.unwatch();
+    this.clearAlerts();
     for (const s of this.subs) s.remove();
     for (const t of [this.reconnectTimer, this.refreshTimer]) if (t) clearTimeout(t);
     for (const t of [this.pollTimer, this.healthTimer]) if (t) clearInterval(t);
@@ -222,6 +232,12 @@ export class HostSession {
   }
 
   // ---------------------------------------------------------------- snapshot + events
+
+  /** In the background timers don't run (refreshSoon would wait until the app is back), so fetch straight away. */
+  private refreshNow(): void {
+    if (this.foreground) this.refreshSoon();
+    else void this.refresh();
+  }
 
   refreshSoon(): void {
     if (this.refreshTimer) return;
@@ -244,6 +260,7 @@ export class HostSession {
       // Polls mostly return what we already have; replacing it would redraw every screen that reads it.
       if (snapshotKey(before) !== snapshotKey(snapshot)) set({ snapshot });
       this.followClosedPane(before, snapshot);
+      void this.alertApprovals(before, snapshot);
       await this.ensureWatch(snapshot.panes.map((p) => p.pane_id));
     } catch (e) {
       // The reconnect loop handles a dead link; a failed poll isn't worth surfacing.
@@ -252,7 +269,7 @@ export class HostSession {
       this.refreshing = false;
       if (this.refreshAgain) {
         this.refreshAgain = false;
-        this.refreshSoon();
+        this.refreshNow();
       }
     }
   }
@@ -284,7 +301,7 @@ export class HostSession {
       const w = await link.watch(
         get().session,
         panes,
-        () => this.refreshSoon(),
+        () => this.refreshNow(),
         () => {
           if (this.watch !== w) return;
           this.watch = null;
@@ -453,11 +470,71 @@ export class HostSession {
     if (!fg) {
       void this.releaseTerminal(false);
     } else {
+      // Back in the app, which shows who needs you.
+      this.clearAlerts();
       this.networkChanged();
       this.refreshSoon();
       const id = get().paneId;
       if (id && !get().terminal) void this.attach(id);
     }
+  }
+
+  // ---------------------------------------------------------------- approval alerts
+
+  /** With approval alerts on, keep running in the background while this computer is open. */
+  syncWatch(): void {
+    if (this.closed) return;
+    if (get().alerts) alerts.watch(`Watching agents on ${this.host.name}`, "You'll get a notification when one needs you.");
+    else {
+      alerts.unwatch();
+      this.clearAlerts();
+    }
+  }
+
+  /** The watch service's tick, in the background: poll herdr, or reconnect if a retry is waiting. */
+  private onWatchTick(): void {
+    if (this.foreground || this.closed || this.connecting) return;
+    if (this.link) void this.refresh();
+    else if (get().conn.kind === "reconnecting") {
+      if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+      void this.connect();
+    }
+  }
+
+  /** An agent that has just started needing you, while Moshlet is in the background: a notification that opens its pane. */
+  private async alertApprovals(before: Snapshot | null, after: Snapshot): Promise<void> {
+    // Answered (here or on the computer) or gone: its notification goes too.
+    for (const [key, pane] of this.alerted) {
+      if (after.agents.some((a) => a.pane_id === pane && a.agent_status === "blocked")) continue;
+      alerts.cancel(key);
+      this.alerted.delete(key);
+    }
+    if (!get().alerts || this.foreground || !before) return;
+    for (const a of after.agents) {
+      if (a.agent_status !== "blocked") continue;
+      if (before.agents.find((b) => b.pane_id === a.pane_id)?.agent_status === "blocked") continue;
+      const key = `${this.host.id}|${get().session}|${a.pane_id}`;
+      if (this.alerted.has(key)) continue;
+      this.alerted.set(key, a.pane_id);
+      const ws = after.workspaces.find((w) => w.workspace_id === a.workspace_id);
+      const tab = after.tabs.find((t) => t.tab_id === a.tab_id);
+      const where = [this.host.name, ws?.label, tab && tabName(tab)].filter(Boolean).join(" · ");
+      // What it's asking, read off its screen, if its dialog is one parseApproval recognises.
+      const question = await this.readVisible(a.pane_id)
+        .then((text) => {
+          const prompt = parseApproval(text);
+          return prompt.parsed ? prompt.question.join(" ").replace(/\s+/g, " ").slice(0, 400) : "";
+        })
+        .catch(() => "");
+      if (!this.alerted.has(key)) continue;
+      alerts.notify(key, `${agentName(a)} needs you`, question || a.terminal_title_stripped || "Waiting for your approval", where, this.host.id, a.pane_id);
+    }
+  }
+
+  private clearAlerts(): void {
+    for (const key of this.alerted.keys()) alerts.cancel(key);
+    this.alerted.clear();
   }
 
   // ---------------------------------------------------------------- history
