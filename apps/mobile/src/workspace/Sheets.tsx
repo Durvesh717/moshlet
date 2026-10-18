@@ -44,6 +44,8 @@ export interface ApprovalSheetHandle {
   /** Reads the dialog, then shows the sheet; already showing, it reads it again. */
   open(): void;
   close(): void;
+  /** Showing, or about to once its read lands. */
+  isOpen(): boolean;
 }
 
 /** Past this, a slow read opens the sheet loading rather than not at all. */
@@ -77,6 +79,7 @@ export const ApprovalSheet = forwardRef<
   const [reply, setReply] = useState("");
   const sheet = useRef<BottomSheetModal>(null);
   const shown = useRef(false);
+  const active = useRef(false);
   const reads = useRef(0);
   /** The pane the shown dialog was read from. */
   const target = useRef<string | undefined>(undefined);
@@ -112,6 +115,7 @@ export const ApprovalSheet = forwardRef<
 
   useImperativeHandle(ref, () => ({
     open() {
+      active.current = true;
       const n = ++reads.current;
       const show = () => {
         if (n !== reads.current || shown.current) return;
@@ -130,13 +134,22 @@ export const ApprovalSheet = forwardRef<
       });
     },
     close() {
+      active.current = false;
       reads.current++;
       sheet.current?.dismiss();
     },
+    isOpen: () => active.current,
   }));
 
   return (
-    <BottomSheetModal ref={sheet} {...sheetProps} onDismiss={() => (shown.current = false)}>
+    <BottomSheetModal
+      ref={sheet}
+      {...sheetProps}
+      onDismiss={() => {
+        shown.current = false;
+        active.current = false;
+      }}
+    >
       <BottomSheetScrollView contentContainerStyle={SHEET}>
         <View className="mb-1 flex-row items-center gap-3.5">
           <View className="size-[52px] items-center justify-center rounded-2xl bg-warning-muted">

@@ -91,15 +91,19 @@ export default function WorkspaceScreen() {
 
   // Open the approval sheet once when the pane on screen starts needing approval, and close it
   // when it no longer does (answered on the computer, or the agent quit): its buttons would type
-  // into whatever is there now. Moving to another pane reads that pane's dialog, or closes.
+  // into whatever is there now. Open on another pane (an alert tapped), it reads that pane's
+  // dialog instead, or closes.
   const lastStatus = useRef<string | undefined>(undefined);
   const lastPane = useRef(s.paneId);
   useEffect(() => {
     const st = agent?.agent_status;
-    const moved = lastPane.current !== undefined && lastPane.current !== s.paneId;
+    const moved = lastPane.current !== s.paneId;
     lastPane.current = s.paneId;
-    if (st === "blocked" && (moved || (lastStatus.current !== undefined && lastStatus.current !== "blocked"))) approval.current?.open();
-    else if (st !== "blocked" && (moved || lastStatus.current === "blocked")) approval.current?.close();
+    if (moved && approval.current?.isOpen()) {
+      if (st === "blocked") approval.current.open();
+      else approval.current.close();
+    } else if (st === "blocked" && lastStatus.current !== undefined && lastStatus.current !== "blocked") approval.current?.open();
+    else if (st !== "blocked" && lastStatus.current === "blocked") approval.current?.close();
     lastStatus.current = st;
   }, [agent?.agent_status, s.paneId]);
 
