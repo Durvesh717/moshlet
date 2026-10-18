@@ -42,9 +42,12 @@ export interface HostCheck {
  */
 export const MOSH_IDLE_TIMEOUT_SEC = 20;
 
-/** The one environment variable that picks a herdr session; "default" means none. */
+/**
+ * The environment variable that picks a herdr session; "default" means none. A shell inside a
+ * herdr pane also has HERDR_SOCKET_PATH, which wins over it, so that goes.
+ */
 const sessionEnv = (session: string): string =>
-  session === "default" ? "unset HERDR_SESSION; " : `HERDR_SESSION=${quote(session)}; export HERDR_SESSION; `;
+  "unset HERDR_SOCKET_PATH; " + (session === "default" ? "unset HERDR_SESSION; " : `HERDR_SESSION=${quote(session)}; export HERDR_SESSION; `);
 
 const NO_HERDR = "MOSHLET-NO-HERDR";
 const NO_MOSH = "MOSHLET-NO-MOSH";
