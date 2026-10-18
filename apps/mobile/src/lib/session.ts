@@ -21,24 +21,25 @@ import {
 import { AppState, type AppStateStatus } from "react-native";
 import * as Network from "expo-network";
 import { alerts, nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-native";
-import type { SshConnection } from "../../modules/moshlet-native/ssh";
+import { forgetDeviceKey, type HostKey, type SshConnection } from "../../modules/moshlet-native/ssh";
 import { saveHosts, type Host } from "./hosts";
 import { deviceIdentity, signIn, SignInError } from "./ssh";
-import { toast, useApp, type LinkUi } from "./store";
+import { toast, useApp, type AppState as Store, type LinkUi } from "./store";
 
 const SNAPSHOT_EVERY_MS = 5000;
 const STALE_REATTACH_MS = 20_000;
 /** A quick command that proves the SSH link still works (after sleep, or a network change). */
 const PROBE_TIMEOUT_MS = 5000;
 const SCROLLBACK_LINES = 3000;
-/** Wheel-down, to put a pane we scrolled back at its bottom before leaving it (herdr keeps the position). */
-const WHEEL_DOWN = "\x1b[<65;1;1M";
 
 /** A snapshot minus panes' scroll positions, which change with every wheel step and aren't shown. */
 const snapshotKey = (s: Snapshot | null) => JSON.stringify(s, (k, v) => (k === "offset_from_bottom" ? undefined : v));
 
 const set = useApp.setState;
 const get = useApp.getState;
+
+/** What a computer's session shows before it has anything: where each session starts and ends. */
+const CLEAN = { snapshot: null, paneId: null, terminal: null, link: null, scrollback: [], historyMode: false, attaching: false, attachError: null } satisfies Partial<Store>;
 
 /**
  * One computer: the SSH connection (reconnecting with backoff), the herdr session's snapshot and
@@ -72,12 +73,15 @@ export class HostSession {
   private subs: { remove(): void }[] = [];
   /** Approval notifications showing, by key, with their panes. */
   private alerted = new Map<string, string>();
-  /** Wheel notches the live pane is scrolled up by (reported by the terminal view). */
-  remoteNotches = 0;
+  /**
+   * How far the live pane is scrolled up, in wheel notches, and one wheel-down in the encoding and
+   * at the spot the terminal view used (it reports both), to scroll it back before leaving it.
+   */
+  private remoteScroll: { notches: number; down: Uint8Array | null } = { notches: 0, down: null };
 
   constructor(host: Host) {
     this.host = host;
-    set({ activeHostId: host.id, session: host.session, snapshot: null, paneId: null, terminal: null, sessions: [], conn: { kind: "connecting" } });
+    set({ ...CLEAN, activeHostId: host.id, session: host.session, sessions: [], conn: { kind: "connecting" } });
     this.subs.push(AppState.addEventListener("change", (s) => this.onAppState(s)));
     this.subs.push(Network.addNetworkStateListener(() => this.networkChanged()));
     const tick = alerts.onTick(() => this.onWatchTick());
@@ -104,8 +108,9 @@ export class HostSession {
     let conn: SshConnection;
     try {
       const identity = await deviceIdentity();
+      if (this.closed) return;
       if (!identity) {
-        set({ conn: { kind: "failed", reason: "This device's key is locked.", fix: "unlock" } });
+        this.update({ conn: { kind: "failed", reason: "This device's key is locked.", fix: "unlock" } });
         return;
       }
       this.tag = identity.fingerprint.replace(/^SHA256:/, "");
@@ -113,10 +118,13 @@ export class HostSession {
     } catch (e) {
       if (e instanceof SignInError && e.problem === "network") return this.retry(e.message);
       const fix = e instanceof SignInError ? ({ locked: "unlock", host_key: "trust", rejected: "setup", network: "retry" } as const)[e.problem] : "retry";
-      set({ conn: { kind: "failed", reason: (e as Error).message, fix } });
+      this.update({ conn: { kind: "failed", reason: (e as Error).message, fix, presented: e instanceof SignInError ? e.presented : undefined } });
       return;
     }
     if (this.closed) return conn.close();
+    // A computer saved without a host key (an earlier version could leave one so) is pinned again
+    // to the key it presents now, rather than staying open to whoever answers.
+    if (!this.host.hostKey) this.persist({ hostKey: conn.hostKey, keyType: conn.keyType });
     const link = new HostLink(conn);
     let sessions;
     try {
@@ -125,9 +133,12 @@ export class HostSession {
       sessions = await link.sessions();
     } catch (e) {
       conn.close();
-      set({ conn: { kind: "failed", reason: (e as Error).message, fix: "retry" } });
+      if (this.closed) return;
+      this.update({ conn: { kind: "failed", reason: (e as Error).message, fix: "retry" } });
       return;
     }
+    // Closed while signing in: don't come back to life with a link, a poll and a terminal.
+    if (this.closed) return conn.close();
     this.firstConnect = false;
     this.conn = conn;
     this.link = link;
@@ -142,10 +153,11 @@ export class HostSession {
     const session = sessions.some((s) => s.name === get().session && s.running)
       ? get().session
       : (sessions.find((s) => s.default)?.name ?? sessions[0]?.name ?? "default");
-    set({ sessions, session, conn: { kind: "online" } });
+    this.update({ sessions, session, conn: { kind: "online" } });
     // The saved session may be gone; remember the one actually in use.
     if (session !== this.host.session) this.persist({ session });
     await this.refresh();
+    if (this.closed) return;
     if (!this.pollTimer) this.pollTimer = setInterval(() => this.refreshSoon(), SNAPSHOT_EVERY_MS);
     // First connect: open the last pane. Reconnect: the mosh session may still be fine; health checks reattach if not.
     if (!get().paneId) this.openPane(this.initialPane());
@@ -159,16 +171,24 @@ export class HostSession {
     this.link = null;
   }
 
-  /** The fix button on a failed connection: unlock, trust a changed host key, or simply try again. */
-  async reconnect(trustNewHostKey = false): Promise<void> {
+  /** The fix button on a failed connection: unlock, or simply try again. */
+  async reconnect(): Promise<void> {
     if (this.closed) return;
-    if (trustNewHostKey) this.persist({ hostKey: "", keyType: "" });
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.attempt = 0;
-    set({ conn: { kind: "connecting" } });
+    this.update({ conn: { kind: "connecting" } });
     await this.connect();
-    // Trusting again: remember the key it presented this time.
-    if (trustNewHostKey && this.conn) this.persist({ hostKey: this.conn.hostKey, keyType: this.conn.keyType });
+  }
+
+  /**
+   * Trusts a changed host key: saves exactly the key the user was shown, then connects. The saved
+   * key is never cleared, so a dial that fails, or the app being killed, can't leave the computer
+   * open to whoever answers; and a different key answering now is refused like any other.
+   */
+  async trustHostKey(key: HostKey): Promise<void> {
+    if (this.closed || !key.hostKey) return;
+    this.persist({ hostKey: key.hostKey, keyType: key.keyType });
+    await this.reconnect();
   }
 
   /** A command that timed out may mean a dead link that SSH hasn't noticed yet. */
@@ -188,7 +208,7 @@ export class HostSession {
       this.dropLink();
       if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
       this.attempt = 0;
-      set({ conn: { kind: "reconnecting", reason: "the connection stopped answering" } });
+      this.update({ conn: { kind: "reconnecting", reason: "the connection stopped answering" } });
       void this.connect();
     }
   }
@@ -196,7 +216,7 @@ export class HostSession {
   private retry(reason: string): void {
     if (this.closed) return;
     this.attempt++;
-    set({ conn: { kind: "reconnecting", reason } });
+    this.update({ conn: { kind: "reconnecting", reason } });
     const delay = Math.min(10_000, 500 * 2 ** Math.min(this.attempt, 5));
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => void this.connect(), delay);
@@ -210,25 +230,36 @@ export class HostSession {
   /** herdr's sessions, fresh (the session switcher shows whether each is running). */
   async refreshSessions(): Promise<void> {
     try {
-      if (this.link) set({ sessions: await this.link.sessions() });
+      if (this.link) this.update({ sessions: await this.link.sessions() });
     } catch {
       // Keep the list we have.
     }
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
     this.closed = true;
+    // An attach in flight gives up its terminal when it sees the number move on.
+    this.attachSeq++;
     alerts.unwatch();
     this.clearAlerts();
     for (const s of this.subs) s.remove();
     for (const t of [this.reconnectTimer, this.refreshTimer]) if (t) clearTimeout(t);
     for (const t of [this.pollTimer, this.healthTimer]) if (t) clearInterval(t);
     setLowLatencyWifi(false);
-    await this.releaseTerminal();
+    // Reset the store now, while it's still this session's: the next computer may open before the
+    // awaits below finish, and from here on nothing this session does writes to the store.
+    const client = get().terminal;
+    set({ ...CLEAN, activeHostId: null, conn: { kind: "idle" } });
+    await this.releaseTerminal(true, client);
     const conn = this.conn;
     this.dropLink();
     conn?.close();
-    set({ activeHostId: null, conn: { kind: "idle" }, snapshot: null, paneId: null, terminal: null, link: null, scrollback: [], historyMode: false });
+  }
+
+  /** Every store write from this session: none once it's closed (a newer session may own the store). */
+  private update(patch: Partial<Store>): void {
+    if (!this.closed) set(patch);
   }
 
   // ---------------------------------------------------------------- snapshot + events
@@ -240,7 +271,7 @@ export class HostSession {
   }
 
   refreshSoon(): void {
-    if (this.refreshTimer) return;
+    if (this.refreshTimer || this.closed) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
       void this.refresh();
@@ -249,6 +280,7 @@ export class HostSession {
 
   /** Never cancels an in-flight fetch (a steady event stream would starve it); later requests collapse into one follow-up. */
   private async refresh(): Promise<void> {
+    if (this.closed) return;
     if (this.refreshing) {
       this.refreshAgain = true;
       return;
@@ -257,8 +289,9 @@ export class HostSession {
     try {
       const before = get().snapshot;
       const snapshot = await this.herdr().snapshot();
+      if (this.closed) return;
       // Polls mostly return what we already have; replacing it would redraw every screen that reads it.
-      if (snapshotKey(before) !== snapshotKey(snapshot)) set({ snapshot });
+      if (snapshotKey(before) !== snapshotKey(snapshot)) this.update({ snapshot });
       this.followClosedPane(before, snapshot);
       void this.alertApprovals(before, snapshot);
       await this.ensureWatch(snapshot.panes.map((p) => p.pane_id));
@@ -319,7 +352,7 @@ export class HostSession {
   switchSession(name: string): void {
     if (name === get().session) return;
     void this.releaseTerminal();
-    set({ session: name, snapshot: null, paneId: null });
+    this.update({ session: name, snapshot: null, paneId: null });
     this.watch?.close();
     this.watch = null;
     this.watchKey = "";
@@ -343,15 +376,15 @@ export class HostSession {
 
   setGrid(cols: number, rows: number): void {
     if (cols === this.grid[0] && rows === this.grid[1]) return;
-    if (cols !== this.grid[0]) set({ scrollback: [], historyMode: false });
+    if (cols !== this.grid[0]) this.update({ scrollback: [], historyMode: false });
     this.grid = [cols, rows];
     get().terminal?.resize(cols, rows);
   }
 
   openPane(paneId: string | null, fresh = false): void {
-    if (!paneId) return;
+    if (!paneId || this.closed) return;
     const prev = get().paneId;
-    set({ paneId, scrollback: [], historyMode: false, attachError: null });
+    this.update({ paneId, scrollback: [], historyMode: false, attachError: null });
     this.persist({ lastPane: { ...this.host.lastPane, [get().session]: paneId } });
     if (prev !== paneId || fresh || !get().terminal) void this.attach(paneId);
   }
@@ -360,14 +393,15 @@ export class HostSession {
     const seq = ++this.attachSeq;
     const pane = get().snapshot?.panes.find((p) => p.pane_id === paneId);
     if (!pane) {
-      set({ attachError: "That pane is gone." });
+      this.update({ attachError: "That pane is gone." });
       return;
     }
     await this.releaseTerminal(false);
+    if (seq !== this.attachSeq) return;
     const conn = this.conn;
     const link = this.link;
     if (!conn || !link || !this.foreground) return;
-    set({ attaching: true, attachError: null });
+    this.update({ attaching: true, attachError: null });
     const [cols, rows] = this.grid[0] > 0 ? this.grid : [60, 30];
     try {
       const m = await link.startMosh(get().session, pane.terminal_id, this.tag);
@@ -379,11 +413,11 @@ export class HostSession {
       this.terminalPid = m.pid;
       if (this.grid[0] > 0) client.resize(this.grid[0], this.grid[1]);
       this.offLink = client.onLink((l) => this.publishLink(l));
-      set({ terminal: client });
+      this.update({ terminal: client });
     } catch (e) {
-      if (seq === this.attachSeq) set({ attachError: (e as Error).message });
+      if (seq === this.attachSeq) this.update({ attachError: (e as Error).message });
     } finally {
-      if (seq === this.attachSeq) set({ attaching: false });
+      if (seq === this.attachSeq) this.update({ attaching: false });
     }
   }
 
@@ -396,24 +430,29 @@ export class HostSession {
    * Lets go of the terminal: scrolls it back to the bottom if we scrolled it, ends the mosh
    * session, and makes sure its mosh-server is gone so the pane gets its desktop size back.
    */
-  private async releaseTerminal(clear = true): Promise<void> {
-    const client = get().terminal;
+  private async releaseTerminal(clearLink = true, client = get().terminal): Promise<void> {
     this.offLink?.();
     this.offLink = null;
-    if (clear) set({ terminal: null, link: null });
-    else set({ terminal: null });
+    this.update(clearLink ? { terminal: null, link: null } : { terminal: null });
     if (!client) return;
     const pid = this.terminalPid;
     this.terminalPid = 0;
-    if (this.remoteNotches > 0) {
-      client.write(new TextEncoder().encode(WHEEL_DOWN.repeat(this.remoteNotches + 2)));
-      this.remoteNotches = 0;
+    const { notches, down } = this.remoteScroll;
+    this.remoteScroll = { notches: 0, down: null };
+    if (notches > 0 && down) {
+      // A couple more than counted, in case one went missing; extra ones do nothing at the bottom.
+      for (let i = 0; i < notches + 2; i++) client.write(down);
       await sleep(400);
     }
     void client.close(800);
     // It quits when the client says goodbye; in case that gets lost, end it from here too (it
     // takes the first signal as a polite goodbye). Failing both, it times out on its own.
     void this.link?.stopMosh(pid, this.tag).catch(() => {});
+  }
+
+  /** From the terminal view: how far it has scrolled the live pane up, and one wheel-down to undo a notch. */
+  setRemoteScroll(notches: number, down: Uint8Array | null): void {
+    this.remoteScroll = { notches, down };
   }
 
   private publishLink(l: Link): void {
@@ -426,7 +465,7 @@ export class HostSession {
       neverHeard: linkNeverHeard(l),
     };
     const cur = get().link;
-    if (!cur || JSON.stringify(cur) !== JSON.stringify(next)) set({ link: next });
+    if (!cur || JSON.stringify(cur) !== JSON.stringify(next)) this.update({ link: next });
   }
 
   /** If the terminal went silent (mosh-server timed out or ended) while we're online, reattach. */
@@ -559,14 +598,14 @@ export class HostSession {
         toast("No history outside the app here. Drag the terminal to scroll the app itself.");
         return;
       }
-      set({ scrollback: layoutScrollback(lines, cols), historyMode: true });
+      this.update({ scrollback: layoutScrollback(lines, cols), historyMode: true });
     } catch (e) {
       toast((e as Error).message);
     }
   }
 
   closeHistory(): void {
-    set({ historyMode: false });
+    this.update({ historyMode: false });
   }
 
   // ---------------------------------------------------------------- actions
@@ -662,8 +701,13 @@ export function activeSession(): HostSession | null {
   return current;
 }
 
-export async function closeHost(): Promise<void> {
+/**
+ * Leaves the open computer. The unlocked device key is dropped from memory too (`forgetKey`), so it
+ * isn't held while no computer is open; opening one unlocks it again (asking if it's been a while).
+ */
+export async function closeHost(forgetKey = true): Promise<void> {
   const s = current;
   current = null;
+  if (forgetKey) forgetDeviceKey();
   await s?.close();
 }

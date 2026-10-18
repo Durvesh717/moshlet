@@ -1,6 +1,7 @@
 import type { Cell, Link, MoshClient, SessionInfo, Snapshot } from "@moshlet/core";
 import { create } from "zustand";
 import { FONT_SIZE, type TerminalFont } from "../theme";
+import type { HostKey } from "../../modules/moshlet-native/ssh";
 import type { Host } from "./hosts";
 
 export type ConnState =
@@ -8,8 +9,11 @@ export type ConnState =
   | { kind: "connecting" }
   | { kind: "online" }
   | { kind: "reconnecting"; reason: string }
-  /** `fix`: what the button offers: unlock the key, trust a changed host key, set the computer up again, or retry. */
-  | { kind: "failed"; reason: string; fix: "unlock" | "trust" | "setup" | "retry" };
+  /**
+   * `fix`: what the button offers: unlock the key, trust a changed host key, set the computer up
+   * again, or retry. With "trust", `presented` is the new key: trusting saves exactly that one.
+   */
+  | { kind: "failed"; reason: string; fix: "unlock" | "trust" | "setup" | "retry"; presented?: HostKey };
 
 /** What the UI shows about the mosh link: coarse, so it changes rarely. */
 export interface LinkUi {

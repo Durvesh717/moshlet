@@ -4,7 +4,13 @@ import { requireOptionalNativeModule, type EventSubscription } from "expo-module
 interface MoshletSshModule {
   publicKey(): string | null;
   loadIdentity(comment: string): Promise<{ publicKey: string; fingerprint: string }>;
-  connect(host: string, port: number, knownHostKey: string | null, knownKeyType: string | null): Promise<{ id: number; hostKey: string; keyType: string; address: string }>;
+  forgetIdentity(): void;
+  connect(
+    host: string,
+    port: number,
+    knownHostKey: string | null,
+    knownKeyType: string | null,
+  ): Promise<{ id: number; hostKey: string; keyType: string; address: string } | { changed: { expected: string } & HostKey }>;
   authKey(id: number, user: string): Promise<boolean>;
   authPassword(id: number, user: string, password: string): Promise<boolean>;
   exec(id: number, command: string, stdin: string | null, timeoutMs: number): Promise<{ status: number | null; stdout: string; stderr: string }>;
@@ -43,7 +49,27 @@ async function call<T>(p: Promise<T>): Promise<T> {
   }
 }
 
-/** Errors from the native side carry a code: ERR_NEEDS_UNLOCK, ERR_HOST_KEY_CHANGED, ERR_NETWORK, ERR_TIMEOUT, ERR_CLOSED. */
+/** A computer's SSH host key: its fingerprint ("SHA256:...") and type ("ssh-ed25519"). */
+export interface HostKey {
+  hostKey: string;
+  keyType: string;
+}
+
+/** The computer presented a different host key from the one saved for it. */
+export class HostKeyChangedError extends Error {
+  readonly code = "ERR_HOST_KEY_CHANGED";
+  readonly expected: string;
+  /** What it presented instead: trusting it means saving exactly this. */
+  readonly presented: HostKey;
+
+  constructor(expected: string, presented: HostKey) {
+    super(`The computer's SSH key changed: it was ${expected}, now it's ${presented.hostKey}.`);
+    this.expected = expected;
+    this.presented = presented;
+  }
+}
+
+/** Errors carry a code: ERR_NEEDS_UNLOCK, ERR_NETWORK, ERR_TIMEOUT, ERR_CLOSED from the native side, ERR_HOST_KEY_CHANGED from HostKeyChangedError. */
 export const errorCode = (e: unknown): string | undefined => (e as { code?: string } | null)?.code;
 
 /** This device's public key line, if it has one yet (no unlock needed). */
@@ -51,6 +77,9 @@ export const devicePublicKey = (): string | null => native?.publicKey() ?? null;
 
 /** Unlocks this device's SSH key (creating it the first time). Throws ERR_NEEDS_UNLOCK when a fingerprint/PIN check is due. */
 export const loadIdentity = (comment: string) => call(need().loadIdentity(comment));
+
+/** Drops the unlocked key from memory; the next use unlocks it again (asking for fingerprint/PIN if due). */
+export const forgetDeviceKey = (): void => native?.forgetIdentity();
 
 let streamSeq = 0;
 
@@ -74,9 +103,11 @@ export class SshConnection implements Shell {
     closeHandlers.set(r.id, (reason) => this.onClosed(reason));
   }
 
-  /** Connects (no login yet), checking the host key against the one seen before, when given. */
-  static async open(host: string, port: number, known?: { hostKey: string; keyType: string }): Promise<SshConnection> {
-    return new SshConnection(await call(need().connect(host, port, known?.hostKey ?? null, known?.keyType ?? null)));
+  /** Connects (no login yet), checking the host key against the one seen before, when given. Throws HostKeyChangedError on a mismatch. */
+  static async open(host: string, port: number, known?: HostKey): Promise<SshConnection> {
+    const r = await call(need().connect(host, port, known?.hostKey ?? null, known?.keyType ?? null));
+    if ("changed" in r) throw new HostKeyChangedError(r.changed.expected, { hostKey: r.changed.hostKey, keyType: r.changed.keyType });
+    return new SshConnection(r);
   }
 
   authKey(user: string): Promise<boolean> {

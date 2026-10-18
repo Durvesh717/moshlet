@@ -112,6 +112,11 @@ class IdentityVault(private val context: Context) {
     return id
   }
 
+  @Synchronized
+  fun forget() {
+    cached = null
+  }
+
   private fun create(comment: String): SshIdentity {
     val cipher = Cipher.getInstance(TRANSFORM)
     try {

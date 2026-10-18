@@ -1,4 +1,4 @@
-import { HostLink, type HostCheck } from "@moshlet/core";
+import { authorizedKeyLine, HostLink, type HostCheck } from "@moshlet/core";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ArrowLeft, Check, CircleAlert, Copy, KeyRound, ShieldCheck, X } from "lucide-react-native";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { devicePublicKey, SshConnection } from "../../modules/moshlet-native/ssh";
 import { newHostId, saveHosts, type Host } from "../lib/hosts";
 import { closeHost, openHost } from "../lib/session";
-import { deviceIdentity } from "../lib/ssh";
+import { deviceIdentity, hostKeyCommand } from "../lib/ssh";
 import { toast, useApp } from "../lib/store";
 import { Choices, IconButton } from "../ui/kit";
 
@@ -92,13 +92,16 @@ export default function AddComputer() {
     } else go(STEPS[i - 1].id);
   };
 
+  // The handler always runs the latest back() (it reads the current step), without resubscribing on every render.
+  const backRef = useRef(back);
+  backRef.current = back;
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      back();
+      backRef.current();
       return true;
     });
     return () => sub.remove();
-  });
+  }, []);
 
   const run = async (fn: () => Promise<void>) => {
     Keyboard.dismiss();
@@ -206,8 +209,9 @@ export default function AddComputer() {
       await saveHosts(hosts);
       conn.close();
       setConn(null);
-      // Setting up a computer again replaces its session, connection and all.
-      await closeHost();
+      // Setting up a computer again replaces its session, connection and all. It opens again right
+      // away, so the unlocked device key stays.
+      await closeHost(false);
       openHost(host);
       router.dismissTo("/workspace");
     });
@@ -320,7 +324,12 @@ export default function AddComputer() {
               </View>
             </View>
             <Body>To compare, run this on the computer:</Body>
-            <Command text={`ssh-keygen -lf /etc/ssh/ssh_host_${keyFile(conn.keyType)}_key.pub`} onCopy={copy} />
+            <Command text={hostKeyCommand(conn.keyType)} onCopy={copy} />
+            {existing?.hostKey && existing.hostKey !== conn.hostKey ? (
+              <ErrorBox
+                text={`This isn't the key Moshlet saved for ${existing.name} (${existing.hostKey}). Only continue if you know why it changed, such as a reinstall or a new SSH server.`}
+              />
+            ) : null}
             <Note>Moshlet remembers this key and won't connect if it ever changes.</Note>
             {error && <ErrorBox text={error} />}
             <Action label="Trust and continue" busy={busy} onPress={() => void trusted()} />
@@ -356,7 +365,7 @@ export default function AddComputer() {
             {manualKey && publicKey && (
               <Card className="gap-3 rounded-xl border-border bg-card p-4">
                 <Small>On the computer, as {t.user}, run:</Small>
-                <Command text={`mkdir -p -m 700 ~/.ssh && echo '${publicKey}' >> ~/.ssh/authorized_keys`} onCopy={copy} />
+                <Command text={`mkdir -p -m 700 ~/.ssh && echo '${authorizedKeyLine(publicKey)}' >> ~/.ssh/authorized_keys`} onCopy={copy} />
                 <Action label="I've added it" busy={busy} secondary onPress={() => void run(() => withKey())} />
               </Card>
             )}
@@ -415,7 +424,6 @@ export default function AddComputer() {
 }
 
 /** ssh-keygen's file name for a host key type. */
-const keyFile = (type: string): string => (type.includes("ed25519") ? "ed25519" : type.includes("ecdsa") ? "ecdsa" : "rsa");
 
 const INPUT = "h-[52px] rounded-lg border-border-strong bg-card px-4 font-mono text-base";
 

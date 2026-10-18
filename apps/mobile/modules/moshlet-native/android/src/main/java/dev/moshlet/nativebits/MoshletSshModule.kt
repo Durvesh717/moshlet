@@ -74,10 +74,14 @@ class MoshletSshModule : Module() {
       }
     }
 
+    /** Drops the unlocked key from memory: the next use decrypts it again, asking for fingerprint/PIN if due. */
+    Function("forgetIdentity") { vault.forget() }
+
     /**
      * Opens the connection up to (not including) login, checking the computer's host key against
      * the one seen before (when given). Returns its id, the key it presented, and the IP it
-     * resolved to (mosh needs an address, not a name).
+     * resolved to (mosh needs an address, not a name); or, when the key isn't the one seen before,
+     * `changed` with the key it presented instead.
      */
     AsyncFunction("connect") Coroutine { host: String, port: Int, knownHostKey: String?, knownKeyType: String? ->
       withContext(Dispatchers.IO) {
@@ -100,8 +104,9 @@ class MoshletSshModule : Module() {
           client.connect(host, port)
         } catch (e: Exception) {
           runCatching { client.disconnect() }
+          // Not an error to JavaScript but an answer: the key it presented, so the user can choose to trust exactly that one.
           generateSequence<Throwable>(e) { it.cause }.filterIsInstance<HostKeyChanged>().firstOrNull()?.let {
-            throw CodedException("ERR_HOST_KEY_CHANGED", "The computer's SSH key changed: it was ${it.expected}, now it's ${it.actual}.", null)
+            return@withContext mapOf("changed" to mapOf("expected" to it.expected, "hostKey" to it.actual, "keyType" to seenType))
           }
           throw networkError(e, host)
         }

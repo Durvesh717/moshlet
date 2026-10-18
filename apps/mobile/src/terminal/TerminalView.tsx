@@ -38,8 +38,11 @@ export interface TerminalViewProps {
   onFontSize(size: number): void;
   /** History mode reached the live screen again. */
   onLeaveHistory(): void;
-  /** Wheel notches the live pane is scrolled up by (0 = at the bottom). */
-  onRemoteScroll(notches: number): void;
+  /**
+   * Wheel notches the live pane is scrolled up by (0 = at the bottom), and one wheel-down in the
+   * encoding and at the spot used, so the session can scroll it back the same way when it lets go.
+   */
+  onRemoteScroll(notches: number, down: Uint8Array | null): void;
   onTouchStart(): void;
   onFocusChange(focused: boolean): void;
 }
@@ -68,6 +71,12 @@ function emptyPicture(): SkPicture {
   return rec.finishRecordingAsPicture();
 }
 const encoder = new TextEncoder();
+
+/** One wheel notch at a cell, the way the pane's program asked for mouse events: SGR (mode 1006) or the original bytes. */
+function wheelBytes(screen: Screen, up: boolean, col: number, row: number): Uint8Array {
+  const button = up ? 64 : 65;
+  return encoder.encode(screen.mouseEncoding === 1006 ? `\x1b[<${button};${col};${row}M` : `\x1b[M${String.fromCharCode(32 + button, 32 + col, 32 + row)}`);
+}
 export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(function TerminalView(props, ref) {
   const p = useRef(props);
   p.current = props;
@@ -155,21 +164,19 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     [renderer, redraw],
   );
 
-  const setNotches = (n: number) => {
+  const setNotches = (n: number, down: Uint8Array | null = null) => {
     if (n === live.current.notches) return;
     live.current.notches = n;
-    p.current.onRemoteScroll(n);
+    p.current.onRemoteScroll(n, n > 0 ? down : null);
   };
 
   const sendWheel = useCallback((up: boolean) => {
     const s = screen.current;
     if (!s || s.mouseMode === 0) return;
     if (!up && live.current.notches === 0 && fling.current) return;
-    setNotches(up ? live.current.notches + 1 : Math.max(0, live.current.notches - 1));
-    const button = up ? 64 : 65;
     const { col, row } = live.current;
-    const seq = s.mouseEncoding === 1006 ? `\x1b[<${button};${col};${row}M` : `\x1b[M${String.fromCharCode(32 + button, 32 + col, 32 + row)}`;
-    p.current.onInput(encoder.encode(seq));
+    setNotches(up ? live.current.notches + 1 : Math.max(0, live.current.notches - 1), wheelBytes(s, false, col, row));
+    p.current.onInput(wheelBytes(s, up, col, row));
   }, []);
 
   /** Turns finger travel into wheel notches, rowsPerNotch rows each, so the content keeps pace with the finger. */
@@ -230,7 +237,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     // A new pane starts at its bottom, with no scroll of ours to undo.
     stopFling();
     live.current = { notches: 0, accum: 0, col: 1, row: 1 };
-    p.current.onRemoteScroll(0);
+    p.current.onRemoteScroll(0, null);
     scrollPx.current = 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.paneKey]);

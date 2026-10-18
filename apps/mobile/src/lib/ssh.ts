@@ -1,5 +1,5 @@
 import * as Device from "expo-device";
-import { errorCode, loadIdentity, SshConnection } from "../../modules/moshlet-native/ssh";
+import { errorCode, HostKeyChangedError, loadIdentity, SshConnection, type HostKey } from "../../modules/moshlet-native/ssh";
 import type { Host } from "./hosts";
 import { unlock } from "./unlock";
 
@@ -25,12 +25,19 @@ export type SignInProblem = "locked" | "host_key" | "rejected" | "network";
 
 export class SignInError extends Error {
   readonly problem: SignInProblem;
+  /** For "host_key": the key the computer presented instead of the saved one. */
+  readonly presented?: HostKey;
 
-  constructor(problem: SignInProblem, message: string) {
+  constructor(problem: SignInProblem, message: string, presented?: HostKey) {
     super(message);
     this.problem = problem;
+    this.presented = presented;
   }
 }
+
+/** The command that prints a computer's host key fingerprint, to compare with the one Moshlet shows. */
+export const hostKeyCommand = (keyType: string): string =>
+  `ssh-keygen -lf /etc/ssh/ssh_host_${keyType.includes("ed25519") ? "ed25519" : keyType.includes("ecdsa") ? "ecdsa" : "rsa"}_key.pub`;
 
 /** Connects to a saved computer and signs in with this device's key. */
 export async function signIn(host: Host): Promise<SshConnection> {
@@ -38,7 +45,7 @@ export async function signIn(host: Host): Promise<SshConnection> {
   try {
     conn = await SshConnection.open(host.address, host.port, host.hostKey ? { hostKey: host.hostKey, keyType: host.keyType } : undefined);
   } catch (e) {
-    if (errorCode(e) === "ERR_HOST_KEY_CHANGED") throw new SignInError("host_key", (e as Error).message);
+    if (e instanceof HostKeyChangedError) throw new SignInError("host_key", e.message, e.presented);
     throw new SignInError("network", (e as Error).message);
   }
   try {

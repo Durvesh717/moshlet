@@ -10,6 +10,7 @@ import { useCSSVariable } from "uniwind";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
 import { setFontSize } from "../lib/appearance";
+import { hostKeyCommand } from "../lib/ssh";
 import { activeSession, closeHost } from "../lib/session";
 import { useShallow } from "zustand/react/shallow";
 import { useApp } from "../lib/store";
@@ -208,8 +209,8 @@ export default function WorkspaceScreen() {
             onLongPress={() => paneMap.current?.present()}
             onFontSize={setFontSize}
             onLeaveHistory={() => session.closeHistory()}
-            onRemoteScroll={(n) => {
-              session.remoteNotches = n;
+            onRemoteScroll={(n, down) => {
+              session.setRemoteScroll(n, down);
               setScrolledUp(n > 0);
             }}
             onTouchStart={() => session.nudge()}
@@ -241,12 +242,18 @@ export default function WorkspaceScreen() {
               if (conn.kind !== "failed") return;
               if (conn.fix === "setup") router.push({ pathname: "/add", params: { host: session.host.id } });
               else if (conn.fix === "trust") {
-                void confirm({
-                  title: "Trust the new key?",
-                  message: `Only if you know why ${session.host.name}'s SSH key changed (a reinstall, or a new SSH server). Otherwise something else may be answering at its address.`,
-                  action: "Trust it",
-                  danger: true,
-                }).then((ok) => ok && void session.reconnect(true));
+                const key = conn.presented;
+                // Without the new key in hand, setting the computer up again shows it to compare.
+                if (!key) router.push({ pathname: "/add", params: { host: session.host.id } });
+                else
+                  void confirm({
+                    title: "Trust the new key?",
+                    message:
+                      `Only if you know why ${session.host.name}'s SSH key changed (a reinstall, or a new SSH server). Otherwise something else may be answering at its address.\n\n` +
+                      `New key: ${key.hostKey}\n\nTo compare, run on the computer:\n${hostKeyCommand(key.keyType)}`,
+                    action: "Trust it",
+                    danger: true,
+                  }).then((ok) => ok && void session.trustHostKey(key));
               } else void session.reconnect();
             }}
             attaching={s.attaching}
