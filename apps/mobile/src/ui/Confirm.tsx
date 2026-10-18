@@ -42,7 +42,9 @@ export function ConfirmDialog() {
   const q = asked ?? last.current;
   if (!q) return null;
   return (
-    <AlertDialog open={!!asked} onOpenChange={(open) => !open && answer(false)}>
+    // The dialog closes itself before it runs a button's onPress, so closing answers "no" only a
+    // moment later, when no button has answered (back, or escape).
+    <AlertDialog open={!!asked} onOpenChange={(open) => !open && void Promise.resolve().then(() => answer(false))}>
       <AlertDialogContent className="w-full max-w-[420px] gap-2 self-center rounded-xl border-border-strong bg-card p-[22px]">
         <AlertDialogHeader className="gap-2">
           <AlertDialogTitle className="text-left text-[19px]">{q.title}</AlertDialogTitle>
