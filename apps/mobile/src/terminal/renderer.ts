@@ -47,6 +47,11 @@ const GLYPH_SYM = 1;
 const GLYPH_PARAGRAPH = 2;
 /** A few screens' worth of rows: enough for scrolling back and forth over the same stretch. */
 const ROW_CACHE_SIZE = 400;
+/**
+ * Entries kept in the caches keyed by what a pane prints (glyphs, colors, styles). A pane cycling
+ * through truecolors or combining marks would grow them without end; past this they start again.
+ */
+const MEMO_SIZE = 10_000;
 
 /**
  * Draws a terminal grid with Skia into a picture. ASCII runs go out in one call; other cells
@@ -118,11 +123,22 @@ export class Renderer {
     this.rowCache.clear();
   }
 
+  /** Between frames, so no row is half keyed by style ids that are about to be reused. */
+  private trimMemos(): void {
+    if (this.glyphKind.size > MEMO_SIZE) this.glyphKind.clear();
+    if (this.colors.size > MEMO_SIZE) this.colors.clear();
+    if (this.styleIds.size > MEMO_SIZE) {
+      this.styleIds.clear();
+      this.clearRows(); // their keys hold the old ids
+    }
+  }
+
   grid(width: number, height: number): { cols: number; rows: number } {
     return { cols: Math.max(10, Math.floor(width / this.cellW)), rows: Math.max(4, Math.floor(height / this.cellH)) };
   }
 
   render(f: Frame): SkPicture {
+    this.trimMemos();
     const rec = Skia.PictureRecorder();
     const canvas = rec.beginRecording(Skia.XYWHRect(0, 0, f.width, f.height));
     this.draw(canvas, f);

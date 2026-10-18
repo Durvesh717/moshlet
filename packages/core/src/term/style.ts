@@ -1,6 +1,8 @@
 /**
  * Colors: DEFAULT, a palette index 0..255, or TRUECOLOR | 0xRRGGBB.
- * Styles are interned, so two cells share a style exactly when `a.style === b.style`.
+ * Styles are interned, so cells with the same style share one object and `a.style === b.style`
+ * is a cheap check. A pane cycling through truecolors would grow the table without end, so past
+ * MAX_STYLES it starts again; two equal styles can then be two objects, which costs only a redraw.
  */
 export const DEFAULT = -1;
 export const TRUECOLOR = 0x1000000;
@@ -22,12 +24,14 @@ export interface Style {
   readonly flags: number;
 }
 
+const MAX_STYLES = 10_000;
 const styles = new Map<string, Style>();
 
 export function style(fg: number, bg: number, flags: number): Style {
   const key = `${fg},${bg},${flags}`;
   let s = styles.get(key);
   if (!s) {
+    if (styles.size >= MAX_STYLES) styles.clear();
     s = Object.freeze({ fg, bg, flags });
     styles.set(key, s);
   }
@@ -58,6 +62,7 @@ export function blankCell(bg: number): Cell {
   if (bg === DEFAULT) return BLANK;
   let c = blanks.get(bg);
   if (!c) {
+    if (blanks.size >= MAX_STYLES) blanks.clear();
     c = Object.freeze({ text: "", style: style(DEFAULT, bg, 0), width: 1 });
     blanks.set(bg, c);
   }

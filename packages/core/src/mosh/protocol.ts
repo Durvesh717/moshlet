@@ -2,7 +2,7 @@ import { getU16 } from "../bytes.ts";
 import { Interpreter } from "../term/interpreter.ts";
 import { Screen } from "../term/screen.ts";
 import { Sealer } from "./crypto.ts";
-import { compress, decompress, FragmentAssembler, fragments, NO_TIMESTAMP, plaintext } from "./framing.ts";
+import { compress, decompress, FragmentAssembler, fragments, InstructionTooLarge, NO_TIMESTAMP, plaintext } from "./framing.ts";
 import { decodeHostMessage, decodeInstruction, encodeInstruction, encodeUserEvents, PROTOCOL_VERSION, type UserEvent } from "./messages.ts";
 
 /** uint64 max: the state number that means "this side is shutting down". */
@@ -23,6 +23,10 @@ const MAX_RECEIVED_STATES = 1024;
 const MAX_FRAGMENT_PAYLOAD = 500 - 8 - 4 - 16 - 10;
 
 export class MoshError extends Error {}
+
+/** The largest screen a client asks for or accepts; a phone's or a tablet's grid is far smaller. */
+export const MAX_COLS = 512;
+export const MAX_ROWS = 256;
 
 export const ts16 = (now: number): number => {
   const ts = now & 0xffff;
@@ -162,12 +166,13 @@ export class MoshProtocol {
       }
       this.lastHeard = now;
     }
-    const compressed = this.assembler.add(pt.subarray(4));
-    if (!compressed) return false;
     let inst;
     try {
+      const compressed = this.assembler.add(pt.subarray(4));
+      if (!compressed) return false;
       inst = decodeInstruction(decompress(compressed));
-    } catch {
+    } catch (e) {
+      if (e instanceof InstructionTooLarge) throw new MoshError(e.message);
       return false;
     }
     if (inst.protocolVersion !== PROTOCOL_VERSION) {
@@ -260,7 +265,11 @@ export class MoshProtocol {
       screen = ref.screen.copy();
       for (const inst of decodeHostMessage(diff)) {
         if (inst.kind === "bytes") Interpreter.apply(screen, inst.data);
-        else if (inst.kind === "resize") screen.resize(inst.cols, inst.rows);
+        else if (inst.kind === "resize") {
+          // The server echoes the size the client asked for, which is never this big.
+          if (inst.cols > MAX_COLS || inst.rows > MAX_ROWS) throw new MoshError(`the server asked for a ${inst.cols}x${inst.rows} screen`);
+          screen.resize(inst.cols, inst.rows);
+        }
         // echoAck is only used for local echo prediction, which we don't do (yet)
       }
     }

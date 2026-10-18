@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { historyAbove, layoutScrollback } from "../src/term/scrollback.ts";
+import { historyAbove, layoutScrollback, MAX_HISTORY_ROWS } from "../src/term/scrollback.ts";
 import { Attr, has, PLAIN, type Cell } from "../src/term/style.ts";
 
 const text = (row: readonly Cell[]) => row.filter((c) => c.width !== 0).map((c) => c.text || " ").join("").trimEnd();
 
 describe("layoutScrollback", () => {
+  it("keeps the newest rows of a line longer than the history holds", () => {
+    const rows = layoutScrollback(["a".repeat(MAX_HISTORY_ROWS * 40) + "end"], 40);
+    expect(rows.length).toBe(MAX_HISTORY_ROWS);
+    expect(text(rows[rows.length - 1])).toBe("end");
+    expect(text(rows[0])).toBe("a".repeat(40));
+  });
+
   it("wraps long lines and keeps blank ones", () => {
     expect(layoutScrollback(["abcdefghij", "", "xy"], 4).map(text)).toEqual(["abcd", "efgh", "ij", "", "xy"]);
   });

@@ -1,6 +1,11 @@
 import { blankCell, BLANK, cell, DEFAULT, PLAIN, type Cell, type Style } from "./style.ts";
 
 const NBSP = " ";
+/**
+ * The longest a cell's text grows by combining. Real clusters (emoji ZWJ sequences, flags) stay
+ * under half of it; marks past it are dropped.
+ */
+const MAX_CLUSTER = 32;
 
 /**
  * The client's copy of the remote screen. Received states are never mutated: applying a diff
@@ -149,7 +154,9 @@ export class Screen {
     }
     if (this.lines[y][x].width === 0 && x > 0) x--;
     const prev = this.lines[y][x];
-    this.lines[y][x] = cell((prev.text === "" ? NBSP : prev.text) + text, prev.style, prev.width);
+    const base = prev.text === "" ? NBSP : prev.text;
+    if (base.length + text.length > MAX_CLUSTER) return;
+    this.lines[y][x] = cell(base + text, prev.style, prev.width);
     if (this.emojiWide && text === "️" && prev.width === 1 && x + 1 < this.cols) {
       this.lines[y][x] = cell(this.lines[y][x].text, prev.style, 2);
       this.clearHalfOf(x + 1, y);

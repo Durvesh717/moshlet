@@ -86,3 +86,28 @@ describe("Interpreter", () => {
     expect(wide.cell(3, 0).text).toBe("x");
   });
 });
+
+describe("limits on what a pane can make the terminal keep", () => {
+  it("keeps real clusters whole but drops combining marks past a cluster's limit", () => {
+    const accented = "e\u0301\u0323\u0308";
+    expect(screen(10, 2, accented).cell(0, 0).text).toBe(accented);
+    expect(screen(10, 2, "❤\ufe0f").cell(0, 0).text).toBe("❤\ufe0f");
+    const zalgo = screen(10, 2, "a" + "\u0301".repeat(500));
+    expect(zalgo.cell(0, 0).text.length).toBeLessThanOrEqual(32);
+    expect(zalgo.cell(0, 0).text.startsWith("a\u0301")).toBe(true);
+  });
+
+  it("applies an SGR with too many parameters as far as it keeps them", () => {
+    const s = screen(10, 2, `\x1b[1${";0".repeat(5000)};4mx`);
+    expect(s.cell(0, 0).text).toBe("x");
+    const t = screen(10, 2, "\x1b[1;4mx");
+    expect(has(t.cell(0, 0).style, Attr.UNDERLINE)).toBe(true);
+  });
+
+  it("styles stay correct after the style table starts again", () => {
+    const s = new Screen(4, 1);
+    for (let i = 0; i < 25_000; i++) apply(s, `\x1b[38;2;${i & 255};${(i >> 8) & 255};7m\r.`);
+    apply(s, "\x1b[0;1;38;2;1;2;3m\rx");
+    expect(s.cell(0, 0).style).toMatchObject({ fg: rgb(1, 2, 3), flags: Attr.BOLD });
+  });
+});

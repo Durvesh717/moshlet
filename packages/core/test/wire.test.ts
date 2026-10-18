@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { utf8Encode } from "../src/bytes.ts";
 import { Sealer } from "../src/mosh/crypto.ts";
-import { compress, decompress, FragmentAssembler, fragments } from "../src/mosh/framing.ts";
+import { compress, decompress, FragmentAssembler, fragments, InstructionTooLarge, MAX_INSTRUCTION, NO_TIMESTAMP, plaintext } from "../src/mosh/framing.ts";
 import { decodeHostMessage, decodeInstruction, encodeInstruction, encodeUserEvents } from "../src/mosh/messages.ts";
 import { ProtoWriter, readFields } from "../src/mosh/proto.ts";
+import { MoshError, MoshProtocol } from "../src/mosh/protocol.ts";
 
 const U64_MAX = (1n << 64n) - 1n;
 
@@ -30,6 +31,25 @@ describe("wire format", () => {
   it("round-trips zlib", () => {
     const data = utf8Encode("x".repeat(5000));
     expect(decompress(compress(data))).toEqual(data);
+  });
+
+  it("inflates up to mosh's limit and stops past it", () => {
+    const atLimit = new Uint8Array(MAX_INSTRUCTION);
+    expect(decompress(compress(atLimit)).length).toBe(MAX_INSTRUCTION);
+    // 64 MiB of zeros compresses to about 64 KiB.
+    const bomb = compress(new Uint8Array(64 << 20));
+    expect(() => decompress(bomb)).toThrow(InstructionTooLarge);
+  });
+
+  it("still rejects empty and corrupt zlib", () => {
+    expect(() => decompress(new Uint8Array(0))).toThrow();
+    expect(() => decompress(Uint8Array.of(1, 2, 3, 4, 5, 6))).toThrow();
+  });
+
+  it("stops reassembling an instruction whose fragments pass the limit", () => {
+    const asm = new FragmentAssembler();
+    const frags = fragments(3n, new Uint8Array(MAX_INSTRUCTION + 100_000), 60_000);
+    expect(() => frags.forEach((f) => asm.add(f))).toThrow(InstructionTooLarge);
   });
 
   it("merges adjacent keystrokes and keeps resizes in order", () => {
@@ -66,5 +86,32 @@ describe("base64", () => {
       expect(base64Encode(b)).toBe(Buffer.from(b).toString("base64"));
     }
     expect(base64Decode("aGVs\nbG8=")).toEqual(new TextEncoder().encode("hello"));
+  });
+});
+
+describe("protocol limits", () => {
+  const key = Uint8Array.from({ length: 16 }, (_, i) => i);
+  const fromServer = (seq: bigint, diff: Uint8Array) => {
+    const inst = compress(encodeInstruction({ oldNum: 0n, newNum: seq, ackNum: 0n, throwawayNum: 0n, diff }));
+    return new Sealer(key).seal((1n << 63n) | seq, plaintext(NO_TIMESTAMP, NO_TIMESTAMP, fragments(seq, inst, 1 << 20)[0]));
+  };
+  const resize = (cols: number, rows: number) =>
+    new ProtoWriter().message(1, (m) => m.message(3, (r) => r.uint(5, cols).uint(6, rows))).toBytes();
+
+  it("takes a resize the client could have asked for", () => {
+    const p = new MoshProtocol(key);
+    expect(p.receive(fromServer(1n, resize(200, 60)), 0)).toBe(true);
+    expect([p.latest.cols, p.latest.rows]).toEqual([200, 60]);
+  });
+
+  it("ends the session on a screen far larger than any client asks for", () => {
+    const p = new MoshProtocol(key);
+    expect(() => p.receive(fromServer(1n, resize(100_000, 100_000)), 0)).toThrow(MoshError);
+  });
+
+  it("ends the session on an instruction that inflates past the limit", () => {
+    const p = new MoshProtocol(key);
+    const big = new ProtoWriter().message(1, (m) => m.message(2, (h) => h.bytes(4, new Uint8Array(MAX_INSTRUCTION)))).toBytes();
+    expect(() => p.receive(fromServer(1n, big), 0)).toThrow(MoshError);
   });
 });

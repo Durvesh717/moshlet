@@ -10,6 +10,8 @@ const CSI = 3;
 const OSC = 4;
 const OSC_ESC = 5;
 const MAX_OSC = 1 << 20;
+/** Parameters kept per CSI sequence, and sub-parameters per parameter (xterm keeps 30); more are ignored. */
+const MAX_PARAMS = 32;
 
 /**
  * Applies a byte stream of terminal output to a Screen.
@@ -181,7 +183,7 @@ export class Interpreter {
   private csi(b: number): void {
     if (b >= 0x30 && b <= 0x39) this.current = (this.current < 0 ? 0 : this.current) * 10 + (b - 0x30);
     else if (b === 0x3a) {
-      this.subparams.push(this.current);
+      if (this.subparams.length < MAX_PARAMS) this.subparams.push(this.current);
       this.current = -1;
     } else if (b === 0x3b) this.endParam();
     else if (b >= 0x3c && b <= 0x3f) this.privateMarker = String.fromCharCode(b);
@@ -195,8 +197,8 @@ export class Interpreter {
   }
 
   private endParam(): void {
-    this.subparams.push(this.current);
-    this.params.push(this.subparams);
+    if (this.subparams.length < MAX_PARAMS) this.subparams.push(this.current);
+    if (this.params.length < MAX_PARAMS) this.params.push(this.subparams);
     this.subparams = [];
     this.current = -1;
   }

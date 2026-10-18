@@ -1,5 +1,5 @@
 import type { Screen } from "../term/screen.ts";
-import { MoshError, MoshProtocol } from "./protocol.ts";
+import { MAX_COLS, MAX_ROWS, MoshError, MoshProtocol } from "./protocol.ts";
 
 /** A UDP socket aimed at one server address. Implemented with node:dgram in Node and a native module on phones. */
 export interface UdpSocket {
@@ -71,9 +71,9 @@ export class MoshClient {
     this.protocol = new MoshProtocol(opts.key);
     this.clock = opts.clock ?? (() => Math.floor(performance.now()));
     this.startedAt = this.clock();
-    this.size = [opts.cols, opts.rows];
+    this.size = fit(opts.cols, opts.rows);
     this.hop(this.startedAt);
-    this.protocol.queue({ kind: "resize", cols: opts.cols, rows: opts.rows }, this.startedAt);
+    this.protocol.queue({ kind: "resize", cols: this.size[0], rows: this.size[1] }, this.startedAt);
     this.pump();
   }
 
@@ -110,7 +110,8 @@ export class MoshClient {
     this.pump();
   }
 
-  resize(cols: number, rows: number): void {
+  resize(width: number, height: number): void {
+    const [cols, rows] = fit(width, height);
     if (this.closedReason || (cols === this.size[0] && rows === this.size[1])) return;
     this.size = [cols, rows];
     this.protocol.queue({ kind: "resize", cols, rows }, this.clock());
@@ -233,3 +234,6 @@ export class MoshClient {
     for (const w of this.closeWaiters.splice(0)) w();
   }
 }
+
+/** The screen asked for, within what the protocol accepts back. */
+const fit = (cols: number, rows: number): [number, number] => [Math.min(cols, MAX_COLS), Math.min(rows, MAX_ROWS)];
