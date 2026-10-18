@@ -1,3 +1,4 @@
+import { decodePane, decodeSnapshot } from "./decode.ts";
 import type { Pane, ReadSource, Snapshot, SplitDirection } from "./model.ts";
 
 /** Sends one request to herdr's socket API (over SSH on a phone, through herdr's stdio bridge). */
@@ -45,7 +46,7 @@ export class HerdrApi {
   }
 
   async snapshot(): Promise<Snapshot> {
-    return (await this.call("session.snapshot")).snapshot as Snapshot;
+    return decodeSnapshot((await this.call("session.snapshot")).snapshot);
   }
 
   /** A pane read plus herdr's content revision, so two reads can be matched up. */
@@ -75,7 +76,9 @@ export class HerdrApi {
   }
 
   async splitPane(paneId: string, direction: SplitDirection): Promise<Pane> {
-    return (await this.call("pane.split", { target_pane_id: paneId, direction, focus: false })).pane as Pane;
+    const pane = decodePane((await this.call("pane.split", { target_pane_id: paneId, direction, focus: false })).pane);
+    if (!pane) throw new HerdrError("bad_reply", "herdr split the pane but didn't say which is new");
+    return pane;
   }
 
   async closePane(paneId: string): Promise<void> {
@@ -83,7 +86,7 @@ export class HerdrApi {
   }
 
   async createTab(workspaceId: string): Promise<Pane | undefined> {
-    return (await this.call("tab.create", { workspace_id: workspaceId, focus: false })).root_pane as Pane | undefined;
+    return decodePane((await this.call("tab.create", { workspace_id: workspaceId, focus: false })).root_pane);
   }
 
   async renameTab(tabId: string, label: string): Promise<void> {
@@ -91,7 +94,7 @@ export class HerdrApi {
   }
 
   async createWorkspace(label?: string): Promise<Pane | undefined> {
-    return (await this.call("workspace.create", { ...(label ? { label } : {}), focus: false })).root_pane as Pane | undefined;
+    return decodePane((await this.call("workspace.create", { ...(label ? { label } : {}), focus: false })).root_pane);
   }
 
   async startAgent(name: string, kind: string, paneId: string): Promise<void> {

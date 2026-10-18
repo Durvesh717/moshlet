@@ -124,7 +124,8 @@ export function orderedPanes(s: Snapshot, tabId: string): Pane[] {
 /** herdr labels new tabs with their number; show those as "Tab N". */
 export const tabName = (t: Tab): string => (t.label.trim() === "" || t.label === String(t.number) ? `Tab ${t.number}` : t.label);
 
-export const agentName = (a: Agent): string => a.name ?? a.agent;
+/** Its name in herdr, else its kind ("claude"); herdr leaves the kind out when it can't tell. */
+export const agentName = (a: Agent): string => a.name || a.agent || "agent";
 
 /** "p3" from "w2:p3". */
 export const shortPaneId = (id: string): string => id.slice(id.indexOf(":") + 1);

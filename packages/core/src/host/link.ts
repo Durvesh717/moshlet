@@ -82,7 +82,12 @@ export class HostLink {
         if (/remote Herdr API socket/.test(r.stderr)) throw new ShellError("herdr_unavailable", `herdr session ${session} isn't running.`);
         throw new ShellError("herdr_unavailable", `herdr didn't answer: ${firstLine(r.stderr) || `exit ${r.status}`}`);
       }
-      const msg = JSON.parse(line) as { result?: Record<string, unknown>; error?: { code?: string; message?: string } };
+      let msg: { result?: Record<string, unknown>; error?: { code?: string; message?: string } };
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        throw new HerdrError("bad_reply", `herdr's reply wasn't readable: ${line.slice(0, 80)}`);
+      }
       if (msg.error) throw new HerdrError(msg.error.code ?? "error", msg.error.message ?? "herdr error");
       return msg.result ?? {};
     };
@@ -207,11 +212,9 @@ export class HostLink {
     };
   }
 
-  /** Adds this phone's public key to ~/.ssh/authorized_keys, once (as ssh-copy-id would). */
+  /** Adds this phone's public key to ~/.ssh/authorized_keys, once (as ssh-copy-id would), restricted (see authorizedKeyLine). */
   async installKey(publicKeyLine: string): Promise<void> {
-    const line = publicKeyLine.trim();
-    if (!KEY_LINE.test(line)) throw new Error("that doesn't look like this app's public key");
-    const k = quote(line);
+    const k = quote(authorizedKeyLine(publicKeyLine));
     const f = `"$HOME/.ssh/authorized_keys"`;
     const script =
       `umask 077; mkdir -p "$HOME/.ssh" && touch ${f} && { grep -qxF ${k} ${f} || { ` +
@@ -222,9 +225,26 @@ export class HostLink {
   }
 }
 
+/**
+ * The authorized_keys line for this phone's public key. `restrict` turns off port, agent and X11
+ * forwarding and terminal (pty) allocation, none of which Moshlet uses (it runs commands, and
+ * mosh-server makes its own terminal), so a stolen key couldn't reach the computer's network.
+ */
+export function authorizedKeyLine(publicKeyLine: string): string {
+  const line = publicKeyLine.trim();
+  if (!KEY_LINE.test(line)) throw new Error("that doesn't look like this app's public key");
+  return `restrict ${line}`;
+}
+
 function parseSessions(json: string): SessionInfo[] {
-  const list = (JSON.parse(json) as { sessions?: { name: string; running: boolean; default: boolean }[] }).sessions ?? [];
-  return list.map((s) => ({ name: s.name, running: !!s.running, default: !!s.default }));
+  let parsed: { sessions?: unknown };
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new ShellError("herdr_failed", "herdr's session list wasn't readable");
+  }
+  const list = Array.isArray(parsed?.sessions) ? (parsed.sessions as { name?: unknown; running?: unknown; default?: unknown }[]) : [];
+  return list.filter((s) => typeof s?.name === "string").map((s) => ({ name: s.name as string, running: !!s.running, default: !!s.default }));
 }
 
 const firstLine = (s: string): string => s.trim().split("\n")[0] ?? "";

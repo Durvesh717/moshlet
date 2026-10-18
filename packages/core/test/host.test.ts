@@ -23,18 +23,18 @@ describe("shell commands", () => {
     expect(() => posix("echo a\\nb")).toThrow();
   });
 
-  it("adds the phone's key once, keeping the file's last line intact", async () => {
+  it("adds the phone's key once, restricted, keeping the file's last line intact", async () => {
     const home = mkdtempSync(join(tmpdir(), "moshlet-home-"));
     const link = new HostLink(localShell({ HOME: home }));
     await link.installKey(KEY);
     await link.installKey(KEY);
     const file = join(home, ".ssh", "authorized_keys");
-    expect(readFileSync(file, "utf8")).toBe(`${KEY}\n`);
+    expect(readFileSync(file, "utf8")).toBe(`restrict ${KEY}\n`);
     expect(execFileSync("stat", ["-c", "%a", join(home, ".ssh")]).toString().trim()).toBe("700");
 
     writeFileSync(file, "ssh-ed25519 AAAAexisting other@laptop");
     await link.installKey(KEY);
-    expect(readFileSync(file, "utf8")).toBe(`ssh-ed25519 AAAAexisting other@laptop\n${KEY}\n`);
+    expect(readFileSync(file, "utf8")).toBe(`ssh-ed25519 AAAAexisting other@laptop\nrestrict ${KEY}\n`);
     await expect(link.installKey("ssh-ed25519 AAAA'; echo injected #")).rejects.toThrow();
   });
 });

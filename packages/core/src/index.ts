@@ -12,6 +12,7 @@ export { historyAbove, layoutScrollback } from "./term/scrollback.ts";
 export * from "./term/style.ts";
 export * from "./herdr/model.ts";
 export * from "./herdr/api.ts";
+export * from "./herdr/decode.ts";
 export * from "./herdr/approval.ts";
 export * from "./host/shell.ts";
 export * from "./host/link.ts";

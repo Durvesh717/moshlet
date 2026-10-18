@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -62,7 +62,8 @@ export async function startTestSshd(): Promise<{ port: number; key: string; stop
   const dir = mkdtempSync(join(tmpdir(), "moshlet-sshd-"));
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", join(dir, "host_ed25519")]);
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "moshlet-test", "-f", join(dir, "client")]);
-  execFileSync("cp", [join(dir, "client.pub"), join(dir, "authorized_keys")]);
+  // Restricted the way the app installs its key, so everything here runs as it would for the phone.
+  writeFileSync(join(dir, "authorized_keys"), `restrict ${readFileSync(join(dir, "client.pub"), "utf8")}`);
   const port = await freePort();
   writeFileSync(
     join(dir, "sshd_config"),
