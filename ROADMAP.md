@@ -20,23 +20,25 @@
   until the logo is ready.
 - **Beyond herdr**
   - **tmux sessions and plain terminals**, over the same SSH and mosh.
-  - **Agent chat.** A chat screen for a coding agent instead of its terminal, talking to the agent
-    over SSH with the Agent Client Protocol (ACP). Lists the agent's sessions on the computer and
-    opens them with their history; streams replies, thinking, tool calls, diffs and plans; shows
-    approvals as the agent's own choices (allow once, always, reject); offers each agent's modes,
-    models and slash commands.
-    - Agents: Gemini, OpenCode and Copilot have ACP built in. Claude Code goes through
-      `@agentclientprotocol/claude-agent-acp`, which runs the official Claude Code through
-      Anthropic's Agent SDK and signs in only with `claude /login`. Codex goes through `codex-acp`.
-    - Moshlet never reads an agent's saved login or calls a model provider itself, and never uses
-      Claude through OpenCode. Anthropic allows a subscription in Claude Code and the Agent SDK,
-      not in other apps that use its login.
-    - A small helper on the computer keeps agents running while the phone is away and lets the
-      app catch up when it reconnects. Without it, chat works only while the app is open.
+  - **Agent chat.** A chat screen for a coding agent, beside its terminal. The agent keeps running
+    as its own interactive program in a herdr pane or tmux window, and the phone shows it as a
+    conversation: replies, thinking, tool calls with their output, diffs and to-do lists.
+    - The phone follows the agent's own session file over SSH (Claude Code's
+      `~/.claude*/projects/<folder>/<session>.jsonl`, Codex's `~/.codex/sessions/`) and catches up
+      from where it stopped after a reconnect. Nothing extra is installed on the computer.
+    - Messages are typed into the agent's terminal (herdr's `agent.prompt`, or a tmux paste).
+      Approvals work as they do now. Anything the chat can't show (menus, pickers) is one tap away
+      in the terminal view of the same session.
+    - An agent started from the phone opens in a new pane or tmux window; Claude Code gets a known
+      session id (`claude --session-id`). For an agent started on the computer, the session file
+      is the newest one for its folder.
+    - Past sessions are listed from the same files and resumed in a new pane (`claude --resume`).
+    - Each agent's session file is undocumented and changes between versions, so each needs its
+      own reader and tests. Claude Code and Codex first.
+    - The agent is the ordinary interactive program, so a Claude subscription is used just as it
+      is in a terminal. Moshlet never reads an agent's saved login or calls a model provider.
     - Let the user pick the Claude config folder (`CLAUDE_CONFIG_DIR`), because commands over SSH
       may not load the shell profile.
-    - A session open in a terminal and in chat at the same time splits in two, so chat is for
-      sessions started from the phone or not running anywhere else.
 - **Merge phase 2 into `main`.** Phase 2 passes a fresh clone, the tests and use on a phone.
 - **Polish**
   - Check the sidebar scrolls in landscape on a phone (not reproducible on the emulator).
@@ -47,6 +49,12 @@
   - Builds through EAS: needs an Expo account, and an Apple Developer account to install on devices.
 
 ## Ideas
+
+- **Agent chat over ACP.** Talk to agents with the Agent Client Protocol instead of their
+  terminal: approvals as the agent's own choices, and modes and models as buttons. It would need a
+  helper on the computer to keep agents running between connections, and Claude Code only through
+  `@agentclientprotocol/claude-agent-acp` signed in with `claude /login`. Anthropic may bill that
+  use separately from a subscription's normal limits.
 
 - **Smoother live scrolling.** Live panes scroll in whole steps once the computer's frame arrives.
   Two ways to make that smoother without blank rows, if it is ever wanted:
