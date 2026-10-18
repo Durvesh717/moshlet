@@ -1,4 +1,4 @@
-import { isNegative, parseApproval, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@moshlet/core";
+import { isNegative, parseApproval, samePrompt, type ApprovalOption, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@moshlet/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
 import { Bot, Columns2, Pencil, Rows2, Send, Trash2, type LucideIcon } from "lucide-react-native";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -53,20 +53,62 @@ const SLOW_READ_MS = 500;
  * The agent's approval dialog, read off its screen, as big buttons; plus a reply box. It reads
  * before it opens, so it slides up once at its final height (sized to the content, it would grow
  * as the read landed, and showed the last dialog's buttons until then).
+ *
+ * A choice is a digit typed into the pane, which answers whatever dialog is there by then. So the
+ * sheet keeps the pane it read, reads it again on a tap, and sends the choice to that pane only if
+ * the dialog still reads the same; otherwise it shows the new one.
  */
 export const ApprovalSheet = forwardRef<
   ApprovalSheetHandle,
-  { agentName: string; where: string; read(): Promise<string>; onChoose(keys: string[]): void; onReply(text: string): void }
+  {
+    agentName: string;
+    where: string;
+    paneId: string | undefined;
+    read(paneId: string): Promise<string>;
+    onChoose(paneId: string, keys: string[]): void;
+    onReply(text: string): void;
+  }
 >(function ApprovalSheet(props, ref) {
   const sheetProps = useSheetProps();
   const input = useSheetInputStyle();
   const [prompt, setPrompt] = useState<ApprovalPrompt | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const sheet = useRef<BottomSheetModal>(null);
   const shown = useRef(false);
   const reads = useRef(0);
-  const read = useRef(props.read);
-  read.current = props.read;
+  /** The pane the shown dialog was read from. */
+  const target = useRef<string | undefined>(undefined);
+  const latest = useRef(props);
+  latest.current = props;
+
+  const readPrompt = (paneId: string | undefined): Promise<ApprovalPrompt> =>
+    paneId ? latest.current.read(paneId).then(parseApproval, () => parseApproval("")) : Promise.resolve(parseApproval(""));
+
+  const choose = (option: ApprovalOption) => {
+    const paneId = target.current;
+    const shownPrompt = prompt;
+    if (!paneId || !shownPrompt || checking) return;
+    const n = reads.current;
+    setChecking(true);
+    void latest.current
+      .read(paneId)
+      .then(parseApproval)
+      .then(
+        (now) => {
+          if (n !== reads.current) return; // closed, or read again, meanwhile
+          if (samePrompt(now, shownPrompt)) {
+            latest.current.onChoose(paneId, option.keys);
+          } else {
+            setPrompt(now);
+            setNotice("This changed on the computer. Check it again before choosing.");
+          }
+        },
+        () => n === reads.current && setNotice("Couldn't check the dialog on the computer, so nothing was sent."),
+      )
+      .finally(() => setChecking(false));
+  };
 
   useImperativeHandle(ref, () => ({
     open() {
@@ -76,17 +118,16 @@ export const ApprovalSheet = forwardRef<
         shown.current = true;
         sheet.current?.present();
       };
+      target.current = latest.current.paneId;
+      setNotice(null);
       if (!shown.current) setPrompt(null);
       const slow = setTimeout(show, SLOW_READ_MS);
-      void read
-        .current()
-        .then(parseApproval, () => parseApproval(""))
-        .then((p) => {
-          clearTimeout(slow);
-          if (n !== reads.current) return;
-          setPrompt(p);
-          show();
-        });
+      void readPrompt(target.current).then((p) => {
+        clearTimeout(slow);
+        if (n !== reads.current) return;
+        setPrompt(p);
+        show();
+      });
     },
     close() {
       reads.current++;
@@ -110,6 +151,11 @@ export const ApprovalSheet = forwardRef<
           <ActivityIndicator colorClassName="accent-brand" className="m-6" />
         ) : (
           <>
+            {notice && (
+              <View className="rounded-lg bg-warning-muted px-3.5 py-3">
+                <Text className="text-sm leading-5 text-foreground">{notice}</Text>
+              </View>
+            )}
             {prompt.question.length > 0 && (
               <View className="gap-1 rounded-lg border border-border bg-terminal p-3.5">
                 {prompt.question.map((l, i) => (
@@ -126,10 +172,12 @@ export const ApprovalSheet = forwardRef<
                 <Button
                   key={`${i}-${o.label}`}
                   variant={primary ? "default" : "secondary"}
-                  onPress={() => props.onChoose(o.keys)}
+                  onPress={() => choose(o)}
+                  disabled={checking}
                   className={cn(
                     "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] active:opacity-80",
                     primary ? "border-primary" : negative ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
+                    checking && "opacity-60",
                   )}
                 >
                   {o.number && <Text className={cn("font-mono text-sm", primary ? "text-primary-foreground" : "text-muted-foreground")}>{o.number}</Text>}

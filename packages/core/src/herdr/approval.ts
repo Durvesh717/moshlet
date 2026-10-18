@@ -54,6 +54,16 @@ export function parseApproval(screen: string): ApprovalPrompt {
   };
 }
 
+/**
+ * Whether two reads show the same dialog: the same question and the same choices. A choice is
+ * sent only while the dialog still reads as it did when shown, since its digit would answer
+ * whatever dialog is there now.
+ */
+export function samePrompt(a: ApprovalPrompt, b: ApprovalPrompt): boolean {
+  const text = (p: ApprovalPrompt) => JSON.stringify([p.parsed, p.question, p.options.map((o) => [o.keys, o.label])]);
+  return text(a) === text(b);
+}
+
 /** Heuristic: options that say no/reject/deny get the danger style. */
 export function isNegative(option: ApprovalOption): boolean {
   const l = option.label.toLowerCase();

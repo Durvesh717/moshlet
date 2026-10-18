@@ -91,12 +91,15 @@ export default function WorkspaceScreen() {
 
   // Open the approval sheet once when the pane on screen starts needing approval, and close it
   // when it no longer does (answered on the computer, or the agent quit): its buttons would type
-  // into whatever is there now.
+  // into whatever is there now. Moving to another pane reads that pane's dialog, or closes.
   const lastStatus = useRef<string | undefined>(undefined);
+  const lastPane = useRef(s.paneId);
   useEffect(() => {
     const st = agent?.agent_status;
-    if (st === "blocked" && lastStatus.current !== undefined && lastStatus.current !== "blocked") approval.current?.open();
-    else if (st !== "blocked" && lastStatus.current === "blocked") approval.current?.close();
+    const moved = lastPane.current !== undefined && lastPane.current !== s.paneId;
+    lastPane.current = s.paneId;
+    if (st === "blocked" && (moved || (lastStatus.current !== undefined && lastStatus.current !== "blocked"))) approval.current?.open();
+    else if (st !== "blocked" && (moved || lastStatus.current === "blocked")) approval.current?.close();
     lastStatus.current = st;
   }, [agent?.agent_status, s.paneId]);
 
@@ -298,9 +301,10 @@ export default function WorkspaceScreen() {
         ref={approval}
         agentName={agent ? (agent.name ?? agent.agent) : "agent"}
         where={[ws?.label, tab && tabName(tab)].filter(Boolean).join(" · ")}
-        read={() => (pane ? session.readVisible(pane.pane_id) : Promise.resolve(""))}
-        onChoose={(keys) => {
-          if (pane) session.sendKeys(pane.pane_id, keys);
+        paneId={pane?.pane_id}
+        read={(id) => session.readVisible(id)}
+        onChoose={(id, keys) => {
+          session.sendKeys(id, keys);
           approval.current?.close();
         }}
         onReply={(text) => {
