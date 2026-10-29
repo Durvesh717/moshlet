@@ -15,4 +15,4 @@
     --recommended-glyphs --name-IDs='*' --name-languages='*' --name-legacy --drop-tables=
   ```
 
-  Their licenses are in `licenses/`.
+Every font's license is in `licenses/` (`Geist.txt` covers Geist and Geist Mono).
