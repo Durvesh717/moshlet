@@ -1,8 +1,9 @@
 # Moshlet
 
-A phone and tablet client for your coding agents over mosh: watch and steer them from Android,
-iPhone and iPad. Today it works with herdr; tmux sessions, plain terminals and single agents
-come next.
+A phone and tablet client for your coding agents: watch and steer them from Android today, and
+iPhone and iPad next. It signs in over SSH and streams panes from `mosh-server`, so they survive
+bad networks and sleep. Today it works with herdr; tmux sessions, plain terminals and single
+agents come next.
 
 ## Layout
 
@@ -26,8 +27,9 @@ Setting up a computer in the app walks through it once:
 
 After that, herdr's API runs through `herdr remote-api-bridge` over SSH, and each pane opens
 in a `mosh-server` running `herdr terminal attach --takeover`. The terminal itself flows over
-mosh (UDP 60000-61000 on the Tailscale address), end to end between app and server. To remove
-a device, delete its line from `~/.ssh/authorized_keys` on the computer.
+mosh's protocol (UDP 60000-61000 on the Tailscale address), end to end between the app's own
+mosh-compatible client and the server. To remove a device, delete its line from
+`~/.ssh/authorized_keys` on the computer.
 
 ## Plan
 
@@ -48,5 +50,5 @@ TypeScript runs directly on Node's type stripping: no build step, erasable synta
 (no enums, no parameter properties), imports with `.ts` extensions.
 
 The tests use an isolated herdr session so they never touch your own: start one with
-`HERDR_SESSION=scratch herdr server &` (or set `MOSHLET_TEST_SESSION`). The test sshd only
+`herdr --session scratch server &` (or set `MOSHLET_TEST_SESSION`). The test sshd only
 listens on loopback, trusts one generated key, and never reads or writes `~/.ssh`.
