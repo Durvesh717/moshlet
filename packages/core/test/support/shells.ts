@@ -16,6 +16,16 @@ export function sshShell(port: number, key: string): Shell {
   return processShell((command) => spawn("ssh", [...args, "--", command]));
 }
 
+/**
+ * A command can exit before reading all its input (a fast `sh` like dash does), which breaks the pipe:
+ * how it went is in its exit, so that's not an error of its own.
+ */
+function ignoreBrokenPipe(proc: ChildProcess, fail: (e: Error) => void): void {
+  proc.stdin!.on("error", (e: NodeJS.ErrnoException) => {
+    if (e.code !== "EPIPE") fail(e);
+  });
+}
+
 function processShell(start: (command: string) => ChildProcess): Shell {
   return {
     exec(command, opts = {}) {
@@ -27,6 +37,7 @@ function processShell(start: (command: string) => ChildProcess): Shell {
         proc.stdout!.on("data", (b: Buffer) => (stdout += b.toString()));
         proc.stderr!.on("data", (b: Buffer) => (stderr += b.toString()));
         proc.on("error", reject);
+        ignoreBrokenPipe(proc, reject);
         proc.on("close", (status) => {
           clearTimeout(timer);
           resolve({ status, stdout, stderr });
@@ -47,6 +58,7 @@ function processShell(start: (command: string) => ChildProcess): Shell {
         }
       });
       proc.on("close", () => onEnd("ended"));
+      ignoreBrokenPipe(proc, (e) => onEnd(e.message));
       proc.stdin!.write(stdin);
       return { close: () => proc.kill() };
     },
