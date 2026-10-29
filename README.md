@@ -52,3 +52,8 @@ TypeScript runs directly on Node's type stripping: no build step, erasable synta
 The tests use an isolated herdr session so they never touch your own: start one with
 `herdr --session scratch server &` (or set `MOSHLET_TEST_SESSION`). The test sshd only
 listens on loopback, trusts one generated key, and never reads or writes `~/.ssh`.
+
+## License
+
+MIT, see [LICENSE](LICENSE). The bundled fonts keep their own licenses, in
+`apps/mobile/assets/fonts/licenses/`.
