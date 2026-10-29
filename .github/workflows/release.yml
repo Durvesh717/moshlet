@@ -1,0 +1,94 @@
+name: Release
+
+# Pushing a version tag (vX.Y.Z, matching "version" in apps/mobile/app.json) checks the code,
+# builds the Android app, signs it with the release key kept in this repository's secrets, and
+# opens a draft release with the APK attached. Nothing is public until the draft is published.
+#
+# Secrets: MOSHLET_RELEASE_KEYSTORE_BASE64 (the .jks file, base64), MOSHLET_RELEASE_STORE_PASSWORD
+# and MOSHLET_RELEASE_KEY_PASSWORD.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: The tag matches the app's version
+        id: version
+        run: |
+          version=$(node -p 'require("./apps/mobile/app.json").expo.version')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "The tag is $GITHUB_REF_NAME but apps/mobile/app.json says $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install
+        run: |
+          npm ci
+          sudo apt-get update -q && sudo apt-get install -yq mosh
+
+      - name: Typecheck and test
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Generate the Android project
+        working-directory: apps/mobile
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Build and sign
+        working-directory: apps/mobile/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.MOSHLET_RELEASE_KEYSTORE_BASE64 }}
+          ORG_GRADLE_PROJECT_MOSHLET_RELEASE_STORE_FILE: ${{ runner.temp }}/release.jks
+          ORG_GRADLE_PROJECT_MOSHLET_RELEASE_KEY_ALIAS: moshlet
+          ORG_GRADLE_PROJECT_MOSHLET_RELEASE_STORE_PASSWORD: ${{ secrets.MOSHLET_RELEASE_STORE_PASSWORD }}
+          ORG_GRADLE_PROJECT_MOSHLET_RELEASE_KEY_PASSWORD: ${{ secrets.MOSHLET_RELEASE_KEY_PASSWORD }}
+        run: |
+          trap 'rm -f "$ORG_GRADLE_PROJECT_MOSHLET_RELEASE_STORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$ORG_GRADLE_PROJECT_MOSHLET_RELEASE_STORE_FILE"
+          ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          apk="moshlet-$VERSION.apk"
+          mkdir dist
+          cp apps/mobile/android/app/build/outputs/apk/release/app-release.apk "dist/$apk"
+          (cd dist && sha256sum "$apk" > "$apk.sha256")
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          cert=$("$apksigner" verify --print-certs "dist/$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')
+          test -n "$cert"
+          cat > notes.md <<EOF
+          Download \`$apk\` below and open it on your Android phone (arm64), or add this repository to
+          [Obtainium](https://github.com/ImranR98/Obtainium) to get updates.
+
+          To check it's genuine, its signing certificate's SHA-256 is \`$cert\`
+          (\`apksigner verify --print-certs $apk\`), and its checksum is in \`$apk.sha256\`.
+          EOF
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft \
+            --title "Moshlet $VERSION" --notes-file notes.md
