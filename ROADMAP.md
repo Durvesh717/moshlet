@@ -42,6 +42,17 @@
 - **Merge phase 2 into `main`.** Phase 2 passes a fresh clone, the tests and use on a phone.
 - **Polish**
   - Check the sidebar scrolls in landscape on a phone (not reproducible on the emulator).
+  - **Copy from terminal**: select and copy text from the terminal screen and scrollback to the clipboard (e.g. via long-press or a selection mode).
+- **More kinds of approval.** The approval sheet knows numbered choices ("1. Yes / 2. No"): a tap
+  types the digit and closes the sheet. Still to come:
+  - **Claude Code's question forms** (several questions, or tick-boxes): tabs to move between the
+    questions, ticking that keeps the sheet open and shows the boxes ticked, Next and Submit
+    buttons, and "Type something" filled from the reply box.
+  - **Choices picked with arrows** instead of digits, like omp's approvals and questions (↑/↓,
+    Enter to pick, Esc to deny, typing denies and steers). The sheet finds no numbers there and
+    offers only Approve (Enter) and Reject (Esc), so "Always allow" and the like need the terminal.
+    Read where the cursor is and move it, reading the screen again before each step.
+  - Every step is still sent only while the dialog reads as it did when shown.
 - **iOS and iPad**
   - An iOS native module for SSH and the device key (for example swift-nio-ssh or Citadel, with the
     key in the Keychain or Secure Enclave), plus UDP for mosh.
