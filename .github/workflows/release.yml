@@ -90,8 +90,8 @@ jobs:
             exit 1
           fi
           cat > notes.md <<EOF
-          Download \`$apk\` below and open it on your Android phone (arm64), or add this repository to
-          [Obtainium](https://github.com/ImranR98/Obtainium) to get updates.
+          Download \`$apk\` below and open it on your Android phone (arm64). To update, open a newer
+          version the same way: your computers and settings are kept.
 
           To check it's genuine, its signing certificate's SHA-256 is \`$cert\`
           (\`apksigner verify --print-certs $apk\`), and its checksum is in \`$apk.sha256\`.
