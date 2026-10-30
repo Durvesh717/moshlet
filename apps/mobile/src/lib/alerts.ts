@@ -38,13 +38,15 @@ async function mayNotify(): Promise<boolean> {
 }
 
 /**
- * A tapped approval notification: open that pane. With the computer open, that's the workspace on
- * screen; otherwise open the computer the way the home screen does, starting on that pane.
+ * A tapped approval notification: open that pane. With the computer open, that's the workspace,
+ * brought back on screen if Moshlet was swiped away from Recents (its screens start over at home
+ * then); otherwise open the computer the way the home screen does, starting on that pane.
  */
 export async function openFromAlert(r: OpenRequest): Promise<void> {
   const session = activeSession();
   if (session?.host.id === r.host) {
     session.openPane(r.pane);
+    router.dismissTo("/workspace");
     return;
   }
   const host = useApp.getState().hosts.find((h) => h.id === r.host);

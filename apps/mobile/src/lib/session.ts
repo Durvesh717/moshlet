@@ -523,7 +523,11 @@ export class HostSession {
   /** With approval alerts on, keep running in the background while this computer is open. */
   syncWatch(): void {
     if (this.closed) return;
-    if (get().alerts) alerts.watch(`Watching agents on ${this.host.name}`, "You'll get a notification when one needs you.");
+    if (get().alerts)
+      alerts.watch(
+        `Watching agents on ${this.host.name}`,
+        "You'll get a notification when one needs you. To stop, tap Computers in Moshlet or turn approval alerts off.",
+      );
     else {
       alerts.unwatch();
       this.clearAlerts();

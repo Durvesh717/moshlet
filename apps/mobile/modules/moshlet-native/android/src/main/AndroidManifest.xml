@@ -16,11 +16,13 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.NoDisplay" />
+        <!-- Keeps going when Moshlet is swiped away from Recents (or cleared with the rest): alerts
+             stop when the computer is closed or alerts are turned off, as its notification says. -->
         <service
             android:name="dev.moshlet.nativebits.WatchService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
-            android:stopWithTask="true">
+            android:stopWithTask="false">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keeps the SSH connection to the user's own computer open, to notify them when a coding agent there needs their approval." />

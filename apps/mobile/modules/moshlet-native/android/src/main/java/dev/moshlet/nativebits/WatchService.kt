@@ -21,7 +21,8 @@ import androidx.core.content.ContextCompat
  * Keeps Moshlet running while it's in the background with approval alerts on, so the SSH link
  * and herdr's events keep flowing: a foreground service (with its quiet ongoing notification)
  * and a partial wake lock. JavaScript timers stop once the app is in the background, so the
- * service also ticks, and the app polls and reconnects on each tick.
+ * service also ticks, and the app polls and reconnects on each tick. Swiping Moshlet away from
+ * Recents doesn't stop it (JavaScript lives on with the process); closing the computer does.
  */
 class WatchService : Service() {
   companion object {
@@ -86,6 +87,7 @@ class WatchService : Service() {
       .setSmallIcon(R.drawable.moshlet_notification)
       .setContentTitle(intent?.getStringExtra("title") ?: "Watching your agents")
       .setContentText(intent?.getStringExtra("text") ?: "")
+      .setStyle(NotificationCompat.BigTextStyle().bigText(intent?.getStringExtra("text") ?: ""))
       .setOngoing(true)
       .setSilent(true)
       .setPriority(NotificationCompat.PRIORITY_LOW)
