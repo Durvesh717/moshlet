@@ -1,0 +1,13 @@
+───────────────────────────────────────────────────────
+ ☐ Size
+
+Which size?
+
+❯ 1. Small
+  2. Medium
+  3. Large
+  4. Type something.
+───────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

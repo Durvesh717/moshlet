@@ -14,5 +14,6 @@ export * from "./herdr/model.ts";
 export * from "./herdr/api.ts";
 export * from "./herdr/decode.ts";
 export * from "./herdr/approval.ts";
+export * from "./herdr/dialog.ts";
 export * from "./host/shell.ts";
 export * from "./host/link.ts";

@@ -1,0 +1,14 @@
+[0m[38;2;153;153;153m───────────────────────────────────────────────────────[0m
+←  ☒ Colour  ☒ Toppings [0m[38;2;0;0;0m[48;2;177;185;249m ✔ Submit [0m[38;2;153;153;153m →[0m
+
+[0m[1m[38;2;255;255;255mReview your answers[0m
+ 
+ ● Which colour should the badge be?
+   [0m[38;2;78;186;101m→ Red[0m 
+ ● Which toppings do you want?
+   [0m[38;2;78;186;101m→ Cheese, Basil, anchovies[0m
+         
+[0m[38;2;153;153;153mReady to submit your answers?[0m
+
+[0m[38;2;177;185;249m❯[0m [0m[38;2;153;153;153m1. [0m[38;2;177;185;249mSubmit answers[0m
+  [0m[38;2;153;153;153m2. [0mCancel

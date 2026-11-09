@@ -1,0 +1,17 @@
+───────────────────────────────────────────────────────
+←  ☐ Colour  ☐ Toppings  ✔ Submit  →
+
+Which colour should the badge be?
+
+❯ 1. Red
+     A bold, high-attention red.
+  2. Green
+     A fresh, positive green.
+  3. Blue
+     A calm, neutral blue.
+  4. Type something.
+───────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to
+cancel

@@ -1,0 +1,14 @@
+───────────────────────────────────────────────────────
+←  ☒ Colour  ☒ Toppings  ✔ Submit  →
+
+Review your answers
+
+ ● Which colour should the badge be?
+   → Red
+ ● Which toppings do you want?
+   → Cheese, Basil, anchovies
+
+Ready to submit your answers?
+
+❯ 1. Submit answers
+  2. Cancel
