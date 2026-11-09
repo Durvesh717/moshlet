@@ -1,8 +1,20 @@
-import { isNegative, parseApproval, samePrompt, type ApprovalOption, type ApprovalPrompt, type Layout, type Pane, type Snapshot } from "@moshlet/core";
+import {
+  answerDialog,
+  isNegative,
+  isPlaceholder,
+  parseApproval,
+  type ApprovalOption,
+  type ApprovalPrompt,
+  type DialogIO,
+  type DialogStep,
+  type Layout,
+  type Pane,
+  type Snapshot,
+} from "@moshlet/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
-import { Bot, Columns2, Pencil, Rows2, Send, Trash2, type LucideIcon } from "lucide-react-native";
+import { Bot, Check, ChevronLeft, ChevronRight, Columns2, MessageCircle, Pencil, Rows2, Send, Square, SquareCheck, Trash2, type LucideIcon } from "lucide-react-native";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Pressable, type TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -46,19 +58,24 @@ export interface ApprovalSheetHandle {
   close(): void;
   /** Showing, or about to once its read lands. */
   isOpen(): boolean;
+  /** Answering: keys are going to the pane. */
+  busy(): boolean;
 }
 
 /** Past this, a slow read opens the sheet loading rather than not at all. */
 const SLOW_READ_MS = 500;
 
+const isForm = (p: ApprovalPrompt | null) => p?.kind === "form" || p?.kind === "review";
+
 /**
- * The agent's approval dialog, read off its screen, as big buttons; plus a reply box. It reads
- * before it opens, so it slides up once at its final height (sized to the content, it would grow
- * as the read landed, and showed the last dialog's buttons until then).
+ * The agent's approval dialog or question, read off its screen, as big buttons; plus a reply box.
+ * It reads before it opens, so it slides up once at its final height (sized to the content, it
+ * would grow as the read landed, and showed the last dialog's buttons until then).
  *
- * A choice is a digit typed into the pane, which answers whatever dialog is there by then. So the
- * sheet keeps the pane it read, reads it again on a tap, and sends the choice to that pane only if
- * the dialog still reads the same; otherwise it shows the new one.
+ * Answering goes through answerDialog: keys go to the pane the dialog was read from, and only
+ * while it still reads the same, a digit, an arrow or the typed text at a time. A numbered or
+ * arrow dialog is done with one pick and the sheet closes. A question form takes several steps
+ * (tabs, ticks, typed answers, the review), so the sheet stays and shows each new state.
  */
 export const ApprovalSheet = forwardRef<
   ApprovalSheetHandle,
@@ -66,8 +83,12 @@ export const ApprovalSheet = forwardRef<
     agentName: string;
     where: string;
     paneId: string | undefined;
+    /** The pane's screen, with its colours. */
     read(paneId: string): Promise<string>;
-    onChoose(paneId: string, keys: string[]): void;
+    keys(paneId: string, keys: string[]): Promise<void>;
+    type(paneId: string, text: string): Promise<void>;
+    /** The dialog is answered (or gone): close. */
+    onDone(): void;
     onReply(text: string): void;
   }
 >(function ApprovalSheet(props, ref) {
@@ -78,8 +99,10 @@ export const ApprovalSheet = forwardRef<
   const [notice, setNotice] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const sheet = useRef<BottomSheetModal>(null);
+  const replyBox = useRef<TextInput>(null);
   const shown = useRef(false);
   const active = useRef(false);
+  const working = useRef(false);
   const reads = useRef(0);
   /** The pane the shown dialog was read from. */
   const target = useRef<string | undefined>(undefined);
@@ -89,28 +112,53 @@ export const ApprovalSheet = forwardRef<
   const readPrompt = (paneId: string | undefined): Promise<ApprovalPrompt> =>
     paneId ? latest.current.read(paneId).then(parseApproval, () => parseApproval("")) : Promise.resolve(parseApproval(""));
 
-  const choose = (option: ApprovalOption) => {
+  const run = (step: DialogStep) => {
     const paneId = target.current;
     const shownPrompt = prompt;
     if (!paneId || !shownPrompt || checking) return;
     const n = reads.current;
+    const p = latest.current;
+    const io: DialogIO = {
+      read: () => p.read(paneId),
+      keys: (k) => p.keys(paneId, k),
+      type: (t) => p.type(paneId, t),
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    };
     setChecking(true);
-    void latest.current
-      .read(paneId)
-      .then(parseApproval)
+    working.current = true;
+    setNotice(null);
+    void answerDialog(io, shownPrompt, step)
       .then(
-        (now) => {
+        (r) => {
           if (n !== reads.current) return; // closed, or read again, meanwhile
-          if (samePrompt(now, shownPrompt)) {
-            latest.current.onChoose(paneId, option.keys);
-          } else {
-            setPrompt(now);
-            setNotice("This changed on the computer. Check it again before choosing.");
-          }
+          if (!r.ok) {
+            setPrompt(r.prompt);
+            setNotice(
+              r.why === "changed"
+                ? "This changed on the computer. Check it again before choosing."
+                : "The dialog didn't move as expected, so nothing more was sent. Check it again.",
+            );
+          } else if (isForm(shownPrompt) && isForm(r.prompt)) {
+            setPrompt(r.prompt);
+            if (step.do === "type") setReply("");
+          } else latest.current.onDone();
         },
-        () => n === reads.current && setNotice("Couldn't check the dialog on the computer, so nothing was sent."),
+        () => n === reads.current && setNotice("Couldn't reach the computer, so nothing more was sent."),
       )
-      .finally(() => setChecking(false));
+      .finally(() => {
+        working.current = false;
+        setChecking(false);
+      });
+  };
+
+  /** "Type something": the answer comes from the reply box. */
+  const typeAnswer = (option: number) => {
+    if (reply.trim() === "") {
+      setNotice("Write your answer in the box below, then tap it again.");
+      replyBox.current?.focus();
+      return;
+    }
+    run({ do: "type", option, text: reply });
   };
 
   useImperativeHandle(ref, () => ({
@@ -139,7 +187,17 @@ export const ApprovalSheet = forwardRef<
       sheet.current?.dismiss();
     },
     isOpen: () => active.current,
+    busy: () => working.current,
   }));
+
+  const form = prompt?.kind === "form";
+  const typedAt = form ? prompt.options.findIndex((o) => o.typed) : -1;
+  const title =
+    prompt?.kind === "review"
+      ? `Send your answers to ${props.agentName}?`
+      : form
+        ? `${props.agentName} has ${(prompt.tabs?.filter((t) => !t.submit).length ?? 1) > 1 ? "questions" : "a question"}`
+        : `${props.agentName} needs approval`;
 
   return (
     <BottomSheetModal
@@ -150,13 +208,13 @@ export const ApprovalSheet = forwardRef<
         active.current = false;
       }}
     >
-      <BottomSheetScrollView contentContainerStyle={SHEET}>
+      <BottomSheetScrollView contentContainerStyle={SHEET} keyboardShouldPersistTaps="handled">
         <View className="mb-1 flex-row items-center gap-3.5">
           <View className="size-[52px] items-center justify-center rounded-2xl bg-warning-muted">
-            <StatusGlyph status="blocked" size={22} />
+            {checking ? <ActivityIndicator colorClassName="accent-warning" /> : <StatusGlyph status="blocked" size={22} />}
           </View>
           <View className="flex-1">
-            <Text className="font-bold text-[21px]">{props.agentName} needs approval</Text>
+            <Text className="font-bold text-[21px]">{title}</Text>
             <Text className="mt-0.5 text-sm text-muted-foreground">{props.where}</Text>
           </View>
         </View>
@@ -169,63 +227,203 @@ export const ApprovalSheet = forwardRef<
                 <Text className="text-sm leading-5 text-foreground">{notice}</Text>
               </View>
             )}
-            {prompt.question.length > 0 && (
-              <View className="gap-1 rounded-lg border border-border bg-terminal p-3.5">
-                {prompt.question.map((l, i) => (
-                  <Text key={i} className="font-mono text-[13px] text-term-fg" numberOfLines={2}>
-                    {l}
-                  </Text>
+            {isForm(prompt) ? (
+              <FormView prompt={prompt} disabled={checking} onStep={run} onType={typeAnswer} />
+            ) : (
+              <>
+                {prompt.question.length > 0 && (
+                  <View className="gap-1 rounded-lg border border-border bg-terminal p-3.5">
+                    {prompt.question.map((l, i) => (
+                      <Text key={i} className="font-mono text-[13px] text-term-fg" numberOfLines={2}>
+                        {l}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+                {prompt.options.map((o, i) => (
+                  <Choice
+                    key={`${i}-${o.label}`}
+                    option={o}
+                    primary={prompt.kind === "arrows" ? i === prompt.options.findIndex((x) => !isNegative(x)) : i === 0}
+                    disabled={checking}
+                    onPress={() => run({ do: "choose", option: i })}
+                  />
                 ))}
-              </View>
+              </>
             )}
-            {prompt.options.map((o, i) => {
-              const primary = i === 0;
-              const negative = isNegative(o);
-              return (
-                <Button
-                  key={`${i}-${o.label}`}
-                  variant={primary ? "default" : "secondary"}
-                  onPress={() => choose(o)}
-                  disabled={checking}
-                  className={cn(
-                    "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] active:opacity-80",
-                    primary ? "border-primary" : negative ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
-                    checking && "opacity-60",
-                  )}
-                >
-                  {o.number && <Text className={cn("font-mono text-sm", primary ? "text-primary-foreground" : "text-muted-foreground")}>{o.number}</Text>}
-                  <Text
-                    className={cn(
-                      "flex-1 text-base",
-                      primary ? "font-semibold text-primary-foreground" : negative ? "font-medium text-destructive" : "font-medium text-foreground",
-                    )}
-                  >
-                    {o.label}
-                  </Text>
-                </Button>
-              );
-            })}
           </>
         )}
-        <View className="mt-1.5 flex-row items-center gap-2.5">
-          <BottomSheetTextInput value={reply} onChangeText={setReply} placeholder={`Reply to ${props.agentName}`} {...input} />
-          <Button
-            accessibilityLabel="Send reply"
-            size="icon"
-            onPress={() => {
-              if (!reply.trim()) return;
-              props.onReply(reply);
-              setReply("");
-            }}
-            className="size-[52px] rounded-full active:opacity-80"
-          >
-            <Icon as={Send} size={20} className="text-primary-foreground" />
-          </Button>
-        </View>
+        {prompt?.kind !== "review" && (
+          <View className="mt-1.5 flex-row items-center gap-2.5">
+            <BottomSheetTextInput
+              ref={replyBox as never}
+              value={reply}
+              onChangeText={setReply}
+              placeholder={typedAt >= 0 ? "Your own answer" : `Reply to ${props.agentName}`}
+              {...input}
+            />
+            <Button
+              accessibilityLabel={typedAt >= 0 ? "Answer with this" : "Send reply"}
+              size="icon"
+              disabled={checking}
+              onPress={() => {
+                if (!reply.trim()) return;
+                if (typedAt >= 0) return typeAnswer(typedAt);
+                props.onReply(reply);
+                setReply("");
+              }}
+              className="size-[52px] rounded-full active:opacity-80"
+            >
+              <Icon as={Send} size={20} className="text-primary-foreground" />
+            </Button>
+          </View>
+        )}
       </BottomSheetScrollView>
     </BottomSheetModal>
   );
 });
+
+/** One choice of a numbered or arrow dialog. */
+function Choice(props: { option: ApprovalOption; primary: boolean; disabled: boolean; onPress(): void }) {
+  const { option: o, primary } = props;
+  const negative = isNegative(o);
+  return (
+    <Button
+      variant={primary ? "default" : "secondary"}
+      onPress={props.onPress}
+      disabled={props.disabled}
+      className={cn(
+        "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] active:opacity-80",
+        primary ? "border-primary" : negative ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
+        props.disabled && "opacity-60",
+      )}
+    >
+      {o.number && <Text className={cn("font-mono text-sm", primary ? "text-primary-foreground" : "text-muted-foreground")}>{o.number}</Text>}
+      <Text
+        className={cn("flex-1 text-base", primary ? "font-semibold text-primary-foreground" : negative ? "font-medium text-destructive" : "font-medium text-foreground")}
+      >
+        {o.label}
+      </Text>
+    </Button>
+  );
+}
+
+/**
+ * Claude Code's question form: its tabs, the open question with its options (tick-boxes when
+ * several may be picked), the row for an answer of one's own, Back and Next; or the review.
+ */
+function FormView(props: { prompt: ApprovalPrompt; disabled: boolean; onStep(step: DialogStep): void; onType(option: number): void }) {
+  const { prompt: p, disabled } = props;
+  const tabs = p.tabs ?? [];
+  const tab = p.tab ?? -1;
+  const known = tab >= 0;
+  const row = "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] py-3 active:opacity-80";
+  return (
+    <>
+      {tabs.length > 1 && (
+        <View className="flex-row flex-wrap gap-2">
+          {tabs.map((t, i) => {
+            const open = i === tab;
+            return (
+              <Pressable
+                key={`${i}-${t.label}`}
+                disabled={disabled || !known || open}
+                onPress={() => props.onStep({ do: "tab", to: i })}
+                className={cn("h-9 flex-row items-center gap-1.5 rounded-full border px-3.5", open ? "border-primary bg-primary" : "border-border-strong bg-secondary")}
+              >
+                {(t.answered || t.submit) && <Icon as={t.submit ? Send : Check} size={14} className={open ? "text-primary-foreground" : "text-muted-foreground"} />}
+                <Text className={cn("font-medium text-sm", open ? "text-primary-foreground" : "text-foreground")}>{t.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+
+      {p.kind === "review" ? (
+        <>
+          <View className="gap-3 rounded-lg border border-border bg-background p-3.5">
+            {(p.answers ?? []).map((a, i) => (
+              <View key={i} className="gap-0.5">
+                <Text className="text-sm text-muted-foreground">{a.question}</Text>
+                <Text className="font-semibold text-base text-foreground">{a.answer || "—"}</Text>
+              </View>
+            ))}
+          </View>
+          {p.options.map((o, i) => (
+            <Choice key={`${i}-${o.label}`} option={o} primary={i === 0} disabled={disabled} onPress={() => props.onStep({ do: "choose", option: i })} />
+          ))}
+        </>
+      ) : (
+        <>
+          <View className="gap-1">
+            <Text className="font-semibold text-[17px] leading-6 text-foreground">{p.question.join(" ")}</Text>
+            {p.multi && <Text className="text-sm text-muted-foreground">Tick any, then Submit.</Text>}
+          </View>
+          {p.options.map((o, i) => {
+            if (o.submit) {
+              return (
+                <Button key="submit" onPress={() => props.onStep({ do: "choose", option: i })} disabled={disabled} className={cn(row, "border-primary", disabled && "opacity-60")}>
+                  <Icon as={Send} size={18} className="text-primary-foreground" />
+                  <Text className="flex-1 font-semibold text-base text-primary-foreground">Submit</Text>
+                </Button>
+              );
+            }
+            if (o.extra) {
+              return (
+                <Button key={`${i}-extra`} variant="ghost" onPress={() => props.onStep({ do: "choose", option: i })} disabled={disabled} className="h-11 justify-start gap-2.5 rounded-lg px-[18px]">
+                  <Icon as={MessageCircle} size={18} className="text-muted-foreground" />
+                  <Text className="font-medium text-[15px] text-muted-foreground">{o.label}</Text>
+                </Button>
+              );
+            }
+            const own = o.typed === true;
+            const blank = own && isPlaceholder(o);
+            return (
+              <Button
+                key={`${i}-${o.label}`}
+                variant="secondary"
+                onPress={() => (own ? props.onType(i) : props.onStep({ do: "choose", option: i }))}
+                disabled={disabled}
+                className={cn(row, o.checked ? "border-primary" : "border-border-strong", blank && "border-dashed", disabled && "opacity-60")}
+              >
+                {p.multi ? (
+                  <Icon as={o.checked ? SquareCheck : Square} size={20} className={o.checked ? "text-primary" : "text-muted-foreground"} />
+                ) : own ? (
+                  <Icon as={Pencil} size={16} className="text-muted-foreground" />
+                ) : (
+                  <Text className="font-mono text-sm text-muted-foreground">{o.number}</Text>
+                )}
+                <View className="flex-1 gap-0.5">
+                  <Text className="font-medium text-base text-foreground">{blank ? "Your own answer" : o.label}</Text>
+                  {(blank || o.detail) && (
+                    <Text className="text-sm leading-5 text-muted-foreground">{blank ? "Write it in the box below, then tap here" : o.detail}</Text>
+                  )}
+                </View>
+                {!p.multi && o.checked && <Icon as={Check} size={18} className="text-primary" />}
+              </Button>
+            );
+          })}
+          {known && tabs.length > 1 && (
+            <View className="flex-row gap-2.5">
+              {tab > 0 && (
+                <Button variant="secondary" onPress={() => props.onStep({ do: "tab", to: tab - 1 })} disabled={disabled} className="h-12 flex-1 gap-1.5 rounded-lg border border-border-strong">
+                  <Icon as={ChevronLeft} size={18} className="text-foreground" />
+                  <Text className="font-medium text-[15px] text-foreground">Back</Text>
+                </Button>
+              )}
+              {tab < tabs.length - 1 && (
+                <Button variant="secondary" onPress={() => props.onStep({ do: "tab", to: tab + 1 })} disabled={disabled} className="h-12 flex-1 gap-1.5 rounded-lg border border-border-strong">
+                  <Text className="font-medium text-[15px] text-foreground">{tabs[tab + 1]?.submit ? "Review" : "Next"}</Text>
+                  <Icon as={ChevronRight} size={18} className="text-foreground" />
+                </Button>
+              )}
+            </View>
+          )}
+        </>
+      )}
+    </>
+  );
+}
 
 /** The tab's layout as herdr has it: tap a pane to open it; split, close, start an agent, rename. */
 export const PaneMapSheet = forwardRef<

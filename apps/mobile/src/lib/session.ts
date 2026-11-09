@@ -682,6 +682,31 @@ export class HostSession {
     return this.herdr().readPane(paneId, "visible").then((r) => r.text);
   }
 
+  /** The screen with its colours, which show a question form's open tab. */
+  readScreen(paneId: string): Promise<string> {
+    return this.herdr().readPane(paneId, "visible", { ansi: true }).then((r) => r.text);
+  }
+
+  /** Keys sent and waited for, for answering a dialog step by step. A failure is thrown, not shown. */
+  async keysNow(paneId: string, keys: string[]): Promise<void> {
+    try {
+      await this.herdr().sendKeys(paneId, keys);
+    } catch (e) {
+      this.callFailed(e);
+      throw e;
+    }
+  }
+
+  /** Text typed into the pane as it is, without Enter, and waited for. */
+  async typeNow(paneId: string, text: string): Promise<void> {
+    try {
+      await this.herdr().sendText(paneId, text, false);
+    } catch (e) {
+      this.callFailed(e);
+      throw e;
+    }
+  }
+
   private persist(patch: Partial<Host>): void {
     Object.assign(this.host, patch);
     const hosts = get().hosts.map((h) => (h.id === this.host.id ? { ...this.host } : h));

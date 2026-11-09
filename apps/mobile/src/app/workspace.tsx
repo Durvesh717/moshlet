@@ -1,4 +1,4 @@
-import { agentIn, appOwnsScroll, orderedPanes, primaryPane, tabName, tabsOf } from "@moshlet/core";
+import { agentIn, appOwnsScroll, orderedPanes, parseApproval, primaryPane, tabName, tabsOf, type MoshClient } from "@moshlet/core";
 import { useBottomSheetModal, type BottomSheetModal } from "@gorhom/bottom-sheet";
 import { Redirect, useRouter } from "expo-router";
 import { ChevronDown } from "lucide-react-native";
@@ -93,19 +93,22 @@ export default function WorkspaceScreen() {
   // when it no longer does (answered on the computer, or the agent quit): its buttons would type
   // into whatever is there now. Open on another pane (an alert tapped), it reads that pane's
   // dialog instead, or closes.
+  // herdr doesn't always report a question form as needing approval, so the screen counts too.
+  const asking = useScreenQuestion(s.terminal, s.paneId);
+  const status = asking ? "blocked" : agent?.agent_status;
   const lastStatus = useRef<string | undefined>(undefined);
   const lastPane = useRef(s.paneId);
   useEffect(() => {
-    const st = agent?.agent_status;
+    const st = status;
     const moved = lastPane.current !== s.paneId;
     lastPane.current = s.paneId;
     if (moved && approval.current?.isOpen()) {
       if (st === "blocked") approval.current.open();
       else approval.current.close();
     } else if (st === "blocked" && lastStatus.current !== undefined && lastStatus.current !== "blocked") approval.current?.open();
-    else if (st !== "blocked" && lastStatus.current === "blocked") approval.current?.close();
+    else if (st !== "blocked" && lastStatus.current === "blocked" && !approval.current?.busy()) approval.current?.close();
     lastStatus.current = st;
-  }, [agent?.agent_status, s.paneId]);
+  }, [status, s.paneId]);
 
   if (!session) return <Redirect href="/" />;
 
@@ -223,9 +226,9 @@ export default function WorkspaceScreen() {
             onTouchStart={() => session.nudge()}
             onFocusChange={setTermFocused}
           />
-          {agent?.agent_status === "blocked" && (
+          {status === "blocked" && (
             <Pill
-              label="Needs approval"
+              label={asking && agent?.agent_status !== "blocked" ? "Question" : "Needs approval"}
               onPress={() => approval.current?.open()}
               height={34}
               tone="warning"
@@ -306,11 +309,10 @@ export default function WorkspaceScreen() {
         agentName={agent ? (agent.name ?? agent.agent) : "agent"}
         where={[ws?.label, tab && tabName(tab)].filter(Boolean).join(" · ")}
         paneId={pane?.pane_id}
-        read={(id) => session.readVisible(id)}
-        onChoose={(id, keys) => {
-          session.sendKeys(id, keys);
-          approval.current?.close();
-        }}
+        read={(id) => session.readScreen(id)}
+        keys={(id, keys) => session.keysNow(id, keys)}
+        type={(id, text) => session.typeNow(id, text)}
+        onDone={() => approval.current?.close()}
         onReply={(text) => {
           session.submit(text);
           approval.current?.close();
@@ -345,6 +347,39 @@ export default function WorkspaceScreen() {
       <TextPromptSheet state={prompt.state} done={prompt.done} />
     </Drawer>
   );
+}
+
+/**
+ * Whether the pane on screen shows a question form (Claude Code's questions, or their review),
+ * read off the live screen. A screen that stops showing one is checked again a little later, so
+ * a frame caught halfway through a redraw doesn't count as the form going away.
+ */
+function useScreenQuestion(client: MoshClient | null, paneKey: string | null): boolean {
+  const [asking, setAsking] = useState(false);
+  useEffect(() => {
+    setAsking(false);
+    if (!client) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let misses = 0;
+    const check = () => {
+      timer = null;
+      const kind = parseApproval(client.screen.text()).kind;
+      if (kind === "form" || kind === "review") {
+        misses = 0;
+        setAsking(true);
+      } else if (++misses >= 2) setAsking(false);
+      else timer = setTimeout(check, 600);
+    };
+    const off = client.onScreen(() => {
+      if (!timer) timer = setTimeout(check, 250);
+    });
+    check();
+    return () => {
+      off();
+      if (timer) clearTimeout(timer);
+    };
+  }, [client, paneKey]);
+  return asking;
 }
 
 function Overlay(props: {
