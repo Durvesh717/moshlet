@@ -44,20 +44,24 @@ export async function answerDialog(io: DialogIO, shown: ApprovalPrompt, step: Di
   let now = parseApproval(raw);
   if (!samePrompt(now, shown)) return { ok: false, why: "changed", prompt: now };
 
-  /** Reads until the screen has changed and held still for a poll, or the wait runs out. */
-  const settle = async () => {
+  /**
+   * Reads until the screen has changed and either shows what the key was meant to do or holds
+   * still for a poll, or until the wait runs out.
+   */
+  const settle = async (expect?: (p: ApprovalPrompt) => boolean) => {
     const before = raw;
     for (let waited = 0; waited < settleMs; waited += pollMs) {
       await io.sleep(pollMs);
       const r = await io.read();
-      if (r !== before && r === raw) break;
+      const held = r === raw;
       raw = r;
+      if (r !== before && (held || expect?.(parseApproval(r)))) break;
     }
     now = parseApproval(raw);
   };
-  const press = async (keys: string[]) => {
+  const press = async (keys: string[], expect?: (p: ApprovalPrompt) => boolean) => {
     await io.keys(keys);
-    await settle();
+    await settle(expect);
   };
   const stuck = (): DialogResult => ({ ok: false, why: "stuck", prompt: now });
   const changed = (): DialogResult => ({ ok: false, why: "changed", prompt: now });
@@ -70,8 +74,9 @@ export async function answerDialog(io: DialogIO, shown: ApprovalPrompt, step: Di
       const from = now.cursor;
       const before = now;
       const down = target > from;
-      await press([down ? "down" : "up"]);
-      if (!samePrompt(now, before) || now.cursor !== from + (down ? 1 : -1)) return false;
+      const moved = (p: ApprovalPrompt) => samePrompt(p, before) && p.cursor === from + (down ? 1 : -1);
+      await press([down ? "down" : "up"], moved);
+      if (!moved(now)) return false;
     }
     return now.cursor === target;
   };
@@ -109,11 +114,14 @@ export async function answerDialog(io: DialogIO, shown: ApprovalPrompt, step: Di
       }
       if (!isPlaceholder(now.options[step.option])) return stuck();
       const blank = now;
+      const typed = (p: ApprovalPrompt) => {
+        const row = p.options[step.option];
+        const shows = row ? `${row.label} ${row.detail ?? ""}`.replace(/\s+/g, "") : "";
+        return p.kind === "form" && p.question.join("\n") === blank.question.join("\n") && shows.startsWith(text.replace(/\s+/g, "").slice(0, 24));
+      };
       await io.type(text);
-      await settle();
-      const row = now.options[step.option];
-      const shows = row ? `${row.label} ${row.detail ?? ""}`.replace(/\s+/g, "") : "";
-      if (now.kind !== "form" || now.question.join("\n") !== blank.question.join("\n") || !shows.startsWith(text.replace(/\s+/g, "").slice(0, 24))) return stuck();
+      await settle(typed);
+      if (!typed(now)) return stuck();
       if (now.multi) {
         // Ticked by typing. The cursor steps off the row so the next digit picks, not types.
         if (!(await leaveTyped())) return stuck();
@@ -130,8 +138,9 @@ export async function answerDialog(io: DialogIO, shown: ApprovalPrompt, step: Di
       for (let n = 0; n < tabs.length && now.tab !== step.to; n++) {
         const from: number = now.tab ?? -1;
         const right: boolean = step.to > from;
-        await press([right ? "right" : "left"]);
-        if ((now.kind !== "form" && now.kind !== "review") || now.tab !== from + (right ? 1 : -1)) return stuck();
+        const next = (p: ApprovalPrompt) => (p.kind === "form" || p.kind === "review") && p.tab === from + (right ? 1 : -1);
+        await press([right ? "right" : "left"], next);
+        if (!next(now)) return stuck();
         if (JSON.stringify(now.tabs?.map((t) => t.label)) !== JSON.stringify(tabs.map((t) => t.label))) return changed();
       }
       return now.tab === step.to ? { ok: true, prompt: now } : stuck();

@@ -52,6 +52,22 @@ describe("answerDialog: arrow lists", () => {
     expect(d.chosen).toBeNull();
   });
 
+  it("waits out a frame caught halfway through a redraw", async () => {
+    const d = new FakeArrows("Trust this folder?", ["No, exit", "Maybe later", "Yes, I trust this folder"]);
+    const p = shown(d);
+    const full = d.screen.bind(d);
+    let half = false;
+    d.screen = () => (half ? ((half = false), full().split("\n").slice(0, 3).join("\n")) : full());
+    const keys = d.keys.bind(d);
+    d.keys = async (k) => {
+      await keys(k);
+      half = true;
+    };
+    const r = await answerDialog(d, p, { do: "choose", option: 2 }, timing);
+    expect(r.ok).toBe(true);
+    expect(d.chosen).toBe(2);
+  });
+
   it("stops without Enter when the list changes on the way", async () => {
     const d = new FakeArrows("Trust this folder?", ["No, exit", "Maybe later", "Yes, I trust this folder"]);
     const p = shown(d);
