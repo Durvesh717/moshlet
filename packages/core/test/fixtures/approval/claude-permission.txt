@@ -9,8 +9,8 @@
  Do you want to proceed?
  ❯ 1. Yes
    2. Yes, and always allow access to
-      /home/sam/code/some-long-project-name/packages/web-
-      app/src
+      /home/sam/code/clients/acme-dashboard/packages/we
+      b-app/src/components/status-badges/generated/svg
       from this project
    3. Yes, and switch to auto mode · auto mode handles
       these prompts for you

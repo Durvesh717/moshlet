@@ -212,21 +212,46 @@ function fallback(ls: Line[]): ApprovalPrompt {
   };
 }
 
+const lineWidth = (l: Line) => l.indent + Array.from(l.text).length;
+
+/**
+ * The text of a line and the lines it wraps onto. Wrapping goes between words: a word that fits
+ * on a line moves whole to the next one. Only a word too long for any line (a path, a URL) is cut
+ * where the line ends. So when a line fills the screen and its last word with the next line's
+ * first would be too long to fit on a line, that is one word cut in two, and it goes on without
+ * a space.
+ */
+function unwrap(ls: Line[], first: number, text: string, more: number[]): string {
+  const width = Math.max(...ls.map(lineWidth));
+  const len = (s: string) => Array.from(s).length;
+  let out = text;
+  let prev = ls[first];
+  for (const i of more) {
+    const l = ls[i];
+    const tail = /\S+$/u.exec(prev.text)?.[0] ?? "";
+    const head = /^\S+/u.exec(l.text)?.[0] ?? "";
+    const cut = lineWidth(prev) >= width && len(tail) + len(head) > width - l.indent;
+    out += (cut ? "" : " ") + l.text;
+    prev = l;
+  }
+  return out;
+}
+
 /** Numbered choices. A label that wraps goes on, indented, on the lines under it. */
 function parseNumbered(ls: Line[], live: Found[]): ApprovalPrompt {
   const options: ApprovalOption[] = [];
   let cursor = -1;
   live.forEach((f, k) => {
     const labelAt = ls[f.line].indent + ls[f.line].text.indexOf(f.label);
-    const parts = [f.label];
+    const more: number[] = [];
     const stop = k + 1 < live.length ? live[k + 1].line : ls.length;
     for (let i = f.line + 1; i < stop; i++) {
       const l = ls[i];
       if (l.text === "" || l.rule || l.indent < labelAt) break;
-      parts.push(l.text);
+      more.push(i);
     }
     if (isCursor(f.marker)) cursor = k;
-    options.push({ keys: [f.number], label: parts.join(" "), number: f.number });
+    options.push({ keys: [f.number], label: unwrap(ls, f.line, f.label, more), number: f.number });
   });
   return { kind: "numbered", question: above(ls, live[0].line, 5), options, cursor, parsed: true };
 }

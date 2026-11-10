@@ -35,7 +35,7 @@ describe("parseApproval: numbered choices", () => {
     expect(p.kind).toBe("numbered");
     expect(p.options.map((o) => o.label)).toEqual([
       "Yes",
-      "Yes, and always allow access to /home/sam/code/some-long-project-name/packages/web- app/src from this project",
+      "Yes, and always allow access to /home/sam/code/clients/acme-dashboard/packages/web-app/src/components/status-badges/generated/svg from this project",
       "Yes, and switch to auto mode · auto mode handles these prompts for you",
       "No",
     ]);
@@ -43,6 +43,21 @@ describe("parseApproval: numbered choices", () => {
     expect(p.question).toContain("touch hello.txt");
     expect(p.question.at(-1)).toBe("Do you want to proceed?");
     expect(p.question.some((l) => l.includes("╌"))).toBe(false);
+  });
+
+  it("joins a word cut at the screen's edge without a space", () => {
+    const rule = "─".repeat(20);
+    const p = parseApproval([rule, "Allow?", "❯ 1. Yes", "  2. Always allow", "     /home/sam/projec", "     ts/web and", "     more", "  3. No", "", "Esc to cancel"].join("\n"));
+    expect(p.options[1].label).toBe("Always allow /home/sam/projects/web and more");
+  });
+
+  it("joins a word cut after other words on its line, and not words that just fill a line", () => {
+    const rule = "─".repeat(24);
+    const p = parseApproval(
+      [rule, "Allow?", "❯ 1. Allow it to /home/s", "     am/projects/web and", "     its files", "  2. Yes, and now switch", "     it on for good", "", "Esc to cancel"].join("\n"),
+    );
+    expect(p.options[0].label).toBe("Allow it to /home/sam/projects/web and its files");
+    expect(p.options[1].label).toBe("Yes, and now switch it on for good");
   });
 
   it("reads the same from plain text", () => {

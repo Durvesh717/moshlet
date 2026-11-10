@@ -1,8 +1,8 @@
 [0m[38;2;255;193;7m───────────────────────────────────────────────────────[0m
  [0m[1m[38;2;255;193;7mAccessing workspace:[0m
 
- [0m[1m/home/sam/code/some-long-project-name/packages/web-ap[0m
- [0m[1mp/src[0m
+ [0m[1m/home/sam/code/clients/acme-dashboard/packages/web-ap[0m
+ [0m[1mp/src/components/status-badges/generated/svg[0m
 
  Quick safety check: Is this a project you created or
  one you trust? (Like your own code, a well-known open

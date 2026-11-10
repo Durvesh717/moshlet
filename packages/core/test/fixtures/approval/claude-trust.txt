@@ -1,8 +1,8 @@
 ───────────────────────────────────────────────────────
  Accessing workspace:
 
- /home/sam/code/some-long-project-name/packages/web-ap
- p/src
+ /home/sam/code/clients/acme-dashboard/packages/web-ap
+ p/src/components/status-badges/generated/svg
 
  Quick safety check: Is this a project you created or
  one you trust? (Like your own code, a well-known open

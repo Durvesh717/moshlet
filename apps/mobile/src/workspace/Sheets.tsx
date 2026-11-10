@@ -293,7 +293,7 @@ function Choice(props: { option: ApprovalOption; primary: boolean; disabled: boo
       onPress={props.onPress}
       disabled={props.disabled}
       className={cn(
-        "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] active:opacity-80",
+        "h-auto min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] py-3 active:opacity-80",
         primary ? "border-primary" : negative ? "border-destructive-border bg-destructive-muted" : "border-border-strong",
         props.disabled && "opacity-60",
       )}
@@ -317,7 +317,7 @@ function FormView(props: { prompt: ApprovalPrompt; disabled: boolean; onStep(ste
   const tabs = p.tabs ?? [];
   const tab = p.tab ?? -1;
   const known = tab >= 0;
-  const row = "min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] py-3 active:opacity-80";
+  const row = "h-auto min-h-14 justify-start gap-3.5 rounded-lg border px-[18px] py-3 active:opacity-80";
   return (
     <>
       {tabs.length > 1 && (
