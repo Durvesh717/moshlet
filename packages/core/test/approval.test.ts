@@ -60,6 +60,25 @@ describe("parseApproval: numbered choices", () => {
     expect(p.options[1].label).toBe("Yes, and now switch it on for good");
   });
 
+  it("joins a path that starts after the words on its line and runs over two more", () => {
+    // As Claude Code drew it at 55 columns, with a made-up path of the same length.
+    const p = parseApproval(
+      [
+        "───────────────────────────────────────────────────────",
+        " Do you want to proceed?",
+        " ❯ 1. Yes",
+        "   2. Yes, and always allow access to /home/sam/code/cl",
+        "      ients/acme-dashboard/packages/web-app/src/compone",
+        "      nts/status-badges/generated/svgs2 from this",
+        "      project",
+        "   3. No",
+        "",
+        " Esc to cancel",
+      ].join("\n"),
+    );
+    expect(p.options[1].label).toBe("Yes, and always allow access to /home/sam/code/clients/acme-dashboard/packages/web-app/src/components/status-badges/generated/svgs2 from this project");
+  });
+
   it("reads the same from plain text", () => {
     expect(samePrompt(parseApproval(screen("claude-permission")), parseApproval(screen("claude-permission", "txt")))).toBe(true);
   });
