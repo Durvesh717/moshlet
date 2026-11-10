@@ -13,6 +13,18 @@
 3. **Approval alerts (Android)**: a Settings switch. While a computer is open, a foreground service
    keeps the connection open and Moshlet notifies when an agent needs approval (with the question
    read off its screen), even with the phone locked; tapping the notification opens that pane.
+4. **More kinds of approval.** The approval sheet reads three kinds of dialog off the screen:
+   - **Numbered choices** ("1. Yes / 2. No"), with choices that wrap over several lines shown
+     whole: a tap types the digit.
+   - **Choices picked with arrows** (Claude Code's folder trust, omp's questions): a tap moves the
+     cursor there a row at a time, then presses Enter; Cancel sends Esc.
+   - **Claude Code's question forms**: a tab per question, options with their descriptions,
+     tick-boxes that stay open and show what's ticked, an answer of one's own typed in the reply
+     box, Back, Next, and the review with Submit answers and Cancel. The sheet stays open from
+     one question to the next. herdr doesn't always report a form as needing approval, so the
+     sheet also opens when the screen shows one.
+   Each key is sent only while the dialog reads as it did when shown, and after every arrow the
+   screen is read again to check the cursor moved one row and nothing else changed.
 
 ## Next (not yet scheduled)
 
@@ -43,16 +55,11 @@
 - **Polish**
   - Check the sidebar scrolls in landscape on a phone (not reproducible on the emulator).
   - **Copy from terminal**: select and copy text from the terminal screen and scrollback to the clipboard (e.g. via long-press or a selection mode).
-- **More kinds of approval.** The approval sheet knows numbered choices ("1. Yes / 2. No"): a tap
-  types the digit and closes the sheet. Still to come:
-  - **Claude Code's question forms** (several questions, or tick-boxes): tabs to move between the
-    questions, ticking that keeps the sheet open and shows the boxes ticked, Next and Submit
-    buttons, and "Type something" filled from the reply box.
-  - **Choices picked with arrows** instead of digits, like omp's approvals and questions (↑/↓,
-    Enter to pick, Esc to deny, typing denies and steers). The sheet finds no numbers there and
-    offers only Approve (Enter) and Reject (Esc), so "Always allow" and the like need the terminal.
-    Read where the cursor is and move it, reading the screen again before each step.
-  - Every step is still sent only while the dialog reads as it did when shown.
+- **More kinds of approval, still to come**
+  - An answer of one's own for omp's questions ("Other (type your own)") from the reply box, as
+    for Claude Code's forms.
+  - Approval alerts for question forms that herdr reports as idle: the alerts follow herdr's
+    status, so with the phone locked they only fire for forms herdr marks as blocked.
 - **iOS and iPad**
   - An iOS native module for SSH and the device key (for example swift-nio-ssh or Citadel, with the
     key in the Keychain or Secure Enclave), plus UDP for mosh.
