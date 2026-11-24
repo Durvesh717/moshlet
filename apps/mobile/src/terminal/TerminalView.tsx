@@ -1,4 +1,4 @@
-import { KeyField, type Cell, type MoshClient, type Screen } from "@moshlet/core";
+import { KeyField, ordered, selectionText, wordAt, type MoshClient, type Point, type Screen, type TextRows } from "@moshlet/core";
 import { Canvas, Picture, Skia, useFonts, useTypeface, type SkPicture } from "@shopify/react-native-skia";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { AppState, Keyboard, PixelRatio, Platform, StyleSheet, TextInput, View, type LayoutChangeEvent } from "react-native";
@@ -16,13 +16,18 @@ export interface TerminalViewHandle {
   /** Scrolls the live pane back to the bottom (after live scrolling). */
   wheelToBottom(): void;
   cols(): number;
+  /** The selected text, rows joined as the pane printed them. */
+  selectedText(): string;
+  /** Selects the live screen, or in History mode everything from the oldest row. */
+  selectAll(): void;
+  clearSelection(): void;
 }
 
 export interface TerminalViewProps {
   client: MoshClient | null;
   /** Changes when a different pane is shown: resets scrolling state. */
   paneKey: string | null;
-  history: readonly (readonly Cell[])[];
+  history: TextRows;
   historyMode: boolean;
   font: TerminalFont;
   fontSize: number;
@@ -34,7 +39,8 @@ export interface TerminalViewProps {
   onInput(bytes: Uint8Array): void;
   onGrid(cols: number, rows: number): void;
   onSwipe(direction: 1 | -1): void;
-  onLongPress(): void;
+  /** A selection was started (long press) or cleared. */
+  onSelecting(active: boolean): void;
   onFontSize(size: number): void;
   /** History mode reached the live screen again. */
   onLeaveHistory(): void;
@@ -107,6 +113,10 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
   const scrollPx = useRef(0);
   const frameQueued = useRef(false);
   const live = useRef({ notches: 0, accum: 0, col: 1, row: 1 });
+  /** The selection's two ends in either order: `a` stays put while `b` follows the finger. */
+  const sel = useRef<{ a: Point; b: Point } | null>(null);
+  /** What a drag is doing to the selection: making it from a long-pressed word, or moving one end. */
+  const selDrag = useRef<{ kind: "none" } | { kind: "word"; from: Point; to: Point } | { kind: "end"; fixed: Point }>({ kind: "none" });
   const redrawNow = useCallback(() => {
     frameQueued.current = false;
     const s = screen.current;
@@ -114,11 +124,12 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     if (!renderer || !s || width === 0) return;
     picture.value = renderer.render({
       screen: s,
-      history: p.current.historyMode ? p.current.history : [],
+      history: p.current.historyMode ? p.current.history.rows : [],
       scrollPx: p.current.historyMode ? scrollPx.current : 0,
       width,
       height,
       focused: focused.current,
+      selection: sel.current && ordered(sel.current.a, sel.current.b),
     });
   }, [renderer, picture]);
 
@@ -133,6 +144,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     const g = renderer.grid(size.current.width, size.current.height);
     if (g.cols !== grid.current.cols || g.rows !== grid.current.rows) {
       grid.current = g;
+      setSelection(null); // the rows move under it
       p.current.onGrid(g.cols, g.rows);
     }
   }, [renderer]);
@@ -149,12 +161,73 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     redraw();
   }, [renderer, palette, redraw]);
 
+  // ---- selection, over the rows drawn: History mode's rows first, then the screen
+  const content = (): TextRows => {
+    const s = screen.current!;
+    if (!p.current.historyMode) return { rows: s.lines, wrapped: s.wrapped };
+    const h = p.current.history;
+    return { rows: [...h.rows, ...s.lines], wrapped: [...h.wrapped, ...s.wrapped] };
+  };
+  const rowCount = () => (p.current.historyMode ? p.current.history.rows.length : 0) + (screen.current?.rows ?? 0);
+
+  function setSelection(next: { a: Point; b: Point } | null) {
+    if (!next && !sel.current) return;
+    if (!!next !== !!sel.current) p.current.onSelecting(!!next);
+    sel.current = next;
+    redraw();
+  }
+
+  /** The cell under a point of the view, kept to the rows that exist. */
+  const cellAt = (x: number, y: number): Point | null => {
+    const s = screen.current;
+    if (!renderer || !s) return null;
+    const pt = renderer.cellAt({ screen: s, history: p.current.historyMode ? p.current.history.rows : [], scrollPx: p.current.historyMode ? scrollPx.current : 0, width: size.current.width }, x, y);
+    return { row: Math.min(Math.max(pt.row, 0), rowCount() - 1), col: pt.col };
+  };
+
+  /** Moves the dragged end of the selection to the finger. */
+  const dragSelection = (x: number, y: number) => {
+    const pt = cellAt(x, y);
+    const d = selDrag.current;
+    if (!pt || d.kind === "none") return;
+    if (d.kind === "end") setSelection({ a: d.fixed, b: pt });
+    // From a word, the selection always keeps the whole word, growing whichever way the finger goes.
+    else if (ordered(pt, d.from)[0] === pt) setSelection({ a: d.to, b: pt });
+    else setSelection({ a: d.from, b: ordered(pt, d.to)[1] });
+  };
+
+  // Holding a selection end near the top or bottom in History mode scrolls on, one row at a time.
+  const edge = useRef<{ raf: number; x: number; y: number } | null>(null);
+  const stopEdge = () => {
+    if (edge.current) cancelAnimationFrame(edge.current.raf);
+    edge.current = null;
+  };
+  const followEdge = (x: number, y: number) => {
+    const ch = renderer?.cellH ?? 16;
+    const dir = y < ch ? 1 : y > size.current.height - ch ? -1 : 0;
+    if (!p.current.historyMode || dir === 0) return stopEdge();
+    if (edge.current) {
+      edge.current.x = x;
+      edge.current.y = y;
+      return;
+    }
+    const step = () => {
+      const e = edge.current;
+      if (!e) return;
+      // Stops just short of the bottom: reaching it leaves History mode, which would drop the selection.
+      setScroll(Math.max(scrollPx.current + dir * ch * 0.5, 0.5));
+      dragSelection(e.x, e.y);
+      e.raf = requestAnimationFrame(step);
+    };
+    edge.current = { raf: requestAnimationFrame(step), x, y };
+  };
+
   // ---- scrolling: live (wheel events to the pane) and local (History mode)
   const fling = useRef<{ raf: number; local: boolean } | null>(null);
 
   const setScroll = useCallback(
     (px: number) => {
-      const max = p.current.history.length * (renderer?.cellH ?? 1);
+      const max = p.current.history.rows.length * (renderer?.cellH ?? 1);
       const next = Math.min(Math.max(px, 0), max);
       const wasBack = scrollPx.current > 0;
       scrollPx.current = next;
@@ -184,6 +257,8 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     (dy: number) => {
       const step = (renderer?.cellH ?? 20) * p.current.rowsPerNotch;
       live.current.accum += dy;
+      // The pane's own scrolling moves its text out from under a selection held in screen rows.
+      if (Math.abs(live.current.accum) >= step) setSelection(null);
       while (live.current.accum >= step) {
         sendWheel(true);
         live.current.accum -= step;
@@ -239,14 +314,17 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
     live.current = { notches: 0, accum: 0, col: 1, row: 1 };
     p.current.onRemoteScroll(0, null);
     scrollPx.current = 0;
+    setSelection(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.paneKey]);
 
   useEffect(() => {
-    // Entering History mode shows the screen above; leaving it returns to live.
+    // Entering History mode shows the screen above; leaving it returns to live. Either way the rows move.
+    setSelection(null);
     if (!renderer) return;
-    scrollPx.current = props.historyMode ? Math.min(props.history.length, grid.current.rows) * renderer.cellH : 0;
+    scrollPx.current = props.historyMode ? Math.min(props.history.rows.length, grid.current.rows) * renderer.cellH : 0;
     redraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.historyMode, props.history, renderer, redraw]);
 
   // ---- gestures
@@ -277,6 +355,15 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         axis.current = "none";
         lastY.current = 0;
         live.current.accum = 0;
+        // A drag that starts on a selection handle (drawn under its end cell) moves that end.
+        selDrag.current = { kind: "none" };
+        const pt = sel.current && cellAt(e.x, e.y);
+        if (sel.current && pt) {
+          const [start, end] = ordered(sel.current.a, sel.current.b);
+          const near = (q: Point, below: number) => pt.row - q.row >= 0 && pt.row - q.row <= below && Math.abs(pt.col - q.col) <= 2;
+          if (near(end, 1)) selDrag.current = { kind: "end", fixed: start };
+          else if (near(start, 1)) selDrag.current = { kind: "end", fixed: end };
+        }
         const cw = renderer?.cellW ?? 8;
         const ch = renderer?.cellH ?? 16;
         live.current.col = Math.min(Math.max(Math.floor(e.x / cw), 0), Math.max(0, grid.current.cols - 1)) + 1;
@@ -285,6 +372,11 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       })
       .onUpdate((e) => {
         if (ignored.current) return;
+        if (selDrag.current.kind !== "none") {
+          dragSelection(e.x, e.y);
+          followEdge(e.x, e.y);
+          return;
+        }
         if (axis.current === "none") {
           // The first update can come before any movement; pick the axis once there is some.
           const ax = Math.abs(e.translationX);
@@ -299,24 +391,51 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         if (p.current.historyMode) setScroll(scrollPx.current + dy);
         else wheel(dy);
       })
+      // Not onFinalize: that also runs when this gesture loses to the long press, and would end the selection drag just begun.
       .onEnd((e) => {
-        if (ignored.current) return;
+        const dragging = selDrag.current.kind !== "none";
+        selDrag.current = { kind: "none" };
+        stopEdge();
+        if (ignored.current || dragging) return;
         if (axis.current === "v") {
           if (Math.abs(e.velocityY) > 200) startFling(e.velocityY, p.current.historyMode);
         } else if (axis.current === "h") {
           if (Math.abs(e.translationX) > size.current.width * 0.25 && Math.abs(e.velocityX) > 500) p.current.onSwipe(e.translationX < 0 ? 1 : -1);
         }
       });
+    // Holding still selects the word underneath; dragging on without lifting extends it.
+    const select = Gesture.Pan()
+      .runOnJS(true)
+      .activateAfterLongPress(450)
+      .onStart((e) => {
+        if (overTerminal()) return;
+        const pt = cellAt(e.x, e.y);
+        const row = pt && content().rows[pt.row];
+        if (!pt || !row) return;
+        stopFling();
+        const [from, to] = wordAt(row, pt.col);
+        selDrag.current = { kind: "word", from: { row: pt.row, col: from }, to: { row: pt.row, col: to } };
+        setSelection({ a: selDrag.current.from, b: selDrag.current.to });
+      })
+      .onUpdate((e) => {
+        dragSelection(e.x, e.y);
+        followEdge(e.x, e.y);
+      })
+      .onEnd(() => {
+        selDrag.current = { kind: "none" };
+        stopEdge();
+      });
     const tap = Gesture.Tap()
       .runOnJS(true)
       .onBegin(() => {
         ignored.current = overTerminal();
       })
-      .onEnd(() => !ignored.current && showKeyboard());
-    const longPress = Gesture.LongPress()
-      .runOnJS(true)
-      .minDuration(450)
-      .onStart(() => !overTerminal() && p.current.onLongPress());
+      .onEnd(() => {
+        if (ignored.current) return;
+        // A tap clears a selection; otherwise it brings up the keyboard.
+        if (sel.current) setSelection(null);
+        else showKeyboard();
+      });
     const pinch = Gesture.Pinch()
       .runOnJS(true)
       .onBegin(() => {
@@ -335,7 +454,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
         updateGrid();
         p.current.onFontSize(committed);
       });
-    return Gesture.Simultaneous(pinch, Gesture.Exclusive(pan, longPress, tap));
+    return Gesture.Simultaneous(pinch, Gesture.Race(pan, select, tap));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderer, wheel, setScroll, redraw, updateGrid]);
 
@@ -359,6 +478,7 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       // Typing returns to the live screen; herdr also snaps a scrolled pane to the bottom on input.
       stopFling();
       setNotches(0);
+      setSelection(null);
       if (p.current.historyMode) p.current.onLeaveHistory();
       p.current.onInput(encoder.encode(out));
     },
@@ -385,6 +505,12 @@ export const TerminalView = forwardRef<TerminalViewHandle, TerminalViewProps>(fu
       setNotches(0);
     },
     cols: () => grid.current.cols,
+    selectedText: () => (sel.current && screen.current ? selectionText(content(), sel.current.a, sel.current.b) : ""),
+    selectAll: () => {
+      const n = rowCount();
+      if (n > 0) setSelection({ a: { row: 0, col: 0 }, b: { row: n - 1, col: grid.current.cols - 1 } });
+    },
+    clearSelection: () => setSelection(null),
   }));
 
   // Android can leave Skia's surface without a GL context once the app has been in the background

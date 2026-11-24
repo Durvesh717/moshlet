@@ -24,7 +24,7 @@ import { alerts, nativeUdp, setLowLatencyWifi } from "../../modules/moshlet-nati
 import { forgetDeviceKey, type HostKey, type SshConnection } from "../../modules/moshlet-native/ssh";
 import { saveHosts, type Host } from "./hosts";
 import { deviceIdentity, signIn, SignInError } from "./ssh";
-import { toast, useApp, type AppState as Store, type LinkUi } from "./store";
+import { NO_SCROLLBACK, toast, useApp, type AppState as Store, type LinkUi } from "./store";
 
 const SNAPSHOT_EVERY_MS = 5000;
 const STALE_REATTACH_MS = 20_000;
@@ -39,7 +39,7 @@ const set = useApp.setState;
 const get = useApp.getState;
 
 /** What a computer's session shows before it has anything: where each session starts and ends. */
-const CLEAN = { snapshot: null, paneId: null, terminal: null, link: null, scrollback: [], historyMode: false, attaching: false, attachError: null } satisfies Partial<Store>;
+const CLEAN = { snapshot: null, paneId: null, terminal: null, link: null, scrollback: NO_SCROLLBACK, historyMode: false, attaching: false, attachError: null } satisfies Partial<Store>;
 
 /**
  * One computer: the SSH connection (reconnecting with backoff), the herdr session's snapshot and
@@ -376,7 +376,7 @@ export class HostSession {
 
   setGrid(cols: number, rows: number): void {
     if (cols === this.grid[0] && rows === this.grid[1]) return;
-    if (cols !== this.grid[0]) this.update({ scrollback: [], historyMode: false });
+    if (cols !== this.grid[0]) this.update({ scrollback: NO_SCROLLBACK, historyMode: false });
     this.grid = [cols, rows];
     get().terminal?.resize(cols, rows);
   }
@@ -384,7 +384,7 @@ export class HostSession {
   openPane(paneId: string | null, fresh = false): void {
     if (!paneId || this.closed) return;
     const prev = get().paneId;
-    this.update({ paneId, scrollback: [], historyMode: false, attachError: null });
+    this.update({ paneId, scrollback: NO_SCROLLBACK, historyMode: false, attachError: null });
     this.persist({ lastPane: { ...this.host.lastPane, [get().session]: paneId } });
     if (prev !== paneId || fresh || !get().terminal) void this.attach(paneId);
   }

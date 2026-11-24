@@ -1,4 +1,4 @@
-import { Attr, has, isBlank, type Cell, type Screen, type Style } from "@moshlet/core";
+import { Attr, has, isBlank, type Cell, type Point, type Screen, type Style } from "@moshlet/core";
 import {
   Skia,
   type SkCanvas,
@@ -33,6 +33,8 @@ export interface Frame {
   width: number;
   height: number;
   focused: boolean;
+  /** Selected cells, in reading order, numbered like the rows drawn: history first, then the screen. */
+  selection: readonly [Point, Point] | null;
 }
 
 const VS16 = "\ufe0f";
@@ -150,7 +152,7 @@ export class Renderer {
     canvas.drawColor(this.color(this.palette.bg));
     const reverse = s.reverseVideo;
     this.backdrop = this.findBackdrop(s, reverse);
-    const ox = (f.width - s.cols * this.cellW) / 2;
+    const ox = this.originX(s.cols, f.width);
     const drawCols = Math.min(s.cols, Math.ceil(f.width / this.cellW) + 1);
 
     // Rows are numbered history first, then the live screen; scrolling moves the window up.
@@ -166,8 +168,37 @@ export class Renderer {
       if (v < h) this.drawCachedRow(canvas, f.history[v], top, ox, drawCols, false, f.width);
       else if (v - h < s.rows) this.drawCachedRow(canvas, s.lines[v - h], top, ox, drawCols, reverse, f.width);
     }
-
+    if (f.selection) this.drawSelection(canvas, f.selection, first, shift, ox, s.cols, f.height);
     this.drawCursor(canvas, f, shift + (h + s.cursorY - first) * this.cellH, ox, drawCols);
+  }
+
+  /** Where the grid starts: it is centered in the width it doesn't fill. */
+  private originX(cols: number, width: number): number {
+    return (width - cols * this.cellW) / 2;
+  }
+
+  /** The cell under a point of the view, numbered as in `Frame.selection` (not clamped to the rows that exist). */
+  cellAt(f: Pick<Frame, "screen" | "history" | "scrollPx" | "width">, x: number, y: number): Point {
+    const col = Math.floor((x - this.originX(f.screen.cols, f.width)) / this.cellW);
+    return { row: Math.floor(f.history.length - f.scrollPx / this.cellH + y / this.cellH), col: Math.min(Math.max(col, 0), f.screen.cols - 1) };
+  }
+
+  /** A tint over the selected cells, and a handle under each end to drag it by. */
+  private drawSelection(canvas: SkCanvas, [start, end]: readonly [Point, Point], first: number, shift: number, ox: number, cols: number, height: number): void {
+    const y = (row: number) => shift + (row - first) * this.cellH;
+    const cursor = this.palette.cursor & 0xffffff;
+    this.fill.setColor(this.color((0x66000000 | cursor) >>> 0));
+    for (let v = Math.max(start.row, first); v <= end.row; v++) {
+      const top = y(v);
+      if (top >= height) break;
+      const x0 = v === start.row ? start.col : 0;
+      const x1 = v === end.row ? end.col + 1 : cols;
+      canvas.drawRect(Skia.XYWHRect(ox + x0 * this.cellW, top, (x1 - x0) * this.cellW, this.cellH), this.fill);
+    }
+    this.paint.setColor(this.color((0xff000000 | cursor) >>> 0));
+    const r = this.cellH * 0.4;
+    canvas.drawCircle(ox + start.col * this.cellW, y(start.row) + this.cellH + r * 0.6, r, this.paint);
+    canvas.drawCircle(ox + (end.col + 1) * this.cellW, y(end.row) + this.cellH + r * 0.6, r, this.paint);
   }
 
   private drawCursor(canvas: SkCanvas, f: Frame, cy: number, ox: number, drawCols: number): void {

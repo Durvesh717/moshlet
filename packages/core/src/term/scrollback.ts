@@ -2,15 +2,18 @@ import { utf8Encode } from "../bytes.ts";
 import { charWidth } from "./charWidth.ts";
 import { Interpreter } from "./interpreter.ts";
 import { Screen } from "./screen.ts";
-import type { Cell } from "./style.ts";
+import type { TextRows } from "./selection.ts";
 
 const ESCAPES = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b./g;
 /** Rows of history kept. Past it the oldest rows scroll off, as in a terminal's scrollback. */
 export const MAX_HISTORY_ROWS = 10_000;
 
-/** Lays out herdr's ANSI history lines as terminal rows `cols` wide, so they can sit above the live screen. */
-export function layoutScrollback(lines: readonly string[], cols: number): (readonly Cell[])[] {
-  if (lines.length === 0 || cols <= 0) return [];
+/**
+ * Lays out herdr's ANSI history lines as terminal rows `cols` wide, so they can sit above the live
+ * screen, with which rows wrap onto the next (for copying text back out).
+ */
+export function layoutScrollback(lines: readonly string[], cols: number): TextRows {
+  if (lines.length === 0 || cols <= 0) return { rows: [], wrapped: [] };
   // Size the scratch screen so it doesn't scroll (which drops the oldest rows): one row per started
   // `cols` of display width, plus slack for wide glyphs wrapping early; at most MAX_HISTORY_ROWS.
   let rows = 0;
@@ -18,7 +21,7 @@ export function layoutScrollback(lines: readonly string[], cols: number): (reado
   const screen = new Screen(cols, Math.min(MAX_HISTORY_ROWS, rows + Math.floor(lines.length / 8) + 2));
   screen.emojiWide = true;
   Interpreter.apply(screen, utf8Encode(lines.join("\x1b[0m\r\n")));
-  return screen.lines.slice(0, screen.cursorY + 1);
+  return { rows: screen.lines.slice(0, screen.cursorY + 1), wrapped: screen.wrapped.slice(0, screen.cursorY + 1) };
 }
 
 /**

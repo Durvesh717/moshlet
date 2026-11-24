@@ -1,7 +1,8 @@
 import { agentIn, appOwnsScroll, orderedPanes, parseApproval, primaryPane, tabName, tabsOf, type MoshClient } from "@moshlet/core";
 import { useBottomSheetModal, type BottomSheetModal } from "@gorhom/bottom-sheet";
+import * as Clipboard from "expo-clipboard";
 import { Redirect, useRouter } from "expo-router";
-import { ChevronDown } from "lucide-react-native";
+import { ChevronDown, Copy, X } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, View } from "react-native";
 import { Drawer } from "react-native-drawer-layout";
@@ -13,7 +14,7 @@ import { setFontSize } from "../lib/appearance";
 import { hostKeyCommand } from "../lib/ssh";
 import { activeSession, closeHost } from "../lib/session";
 import { useShallow } from "zustand/react/shallow";
-import { useApp } from "../lib/store";
+import { toast, useApp } from "../lib/store";
 import { TerminalView, type TerminalViewHandle } from "../terminal/TerminalView";
 import { confirm } from "../ui/Confirm";
 import { Pill, StatusGlyph } from "../ui/kit";
@@ -54,6 +55,7 @@ export default function WorkspaceScreen() {
   const [termFocused, setTermFocused] = useState(false);
   const [keyboardUp, setKeyboardUp] = useState(false);
   const [scrolledUp, setScrolledUp] = useState(false);
+  const [selecting, setSelecting] = useState(false);
   const term = useRef<TerminalViewHandle>(null);
   const approval = useRef<ApprovalSheetHandle>(null);
   const paneMap = useRef<BottomSheetModal>(null);
@@ -68,17 +70,18 @@ export default function WorkspaceScreen() {
     };
   }, []);
 
-  // Android back: close an open sheet, then the prompt box, then the drawer; otherwise open the drawer.
+  // Android back: close an open sheet, then a selection, then the prompt box, then the drawer; otherwise open the drawer.
   const sheets = useBottomSheetModal();
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (sheets.dismiss()) return true;
-      if (composing) setComposing(false);
+      if (selecting) term.current?.clearSelection();
+      else if (composing) setComposing(false);
       else setDrawerOpen(!drawerOpen);
       return true;
     });
     return () => sub.remove();
-  }, [composing, drawerOpen, sheets]);
+  }, [composing, drawerOpen, selecting, sheets]);
 
   const snap = s.snapshot;
   const pane = snap?.panes.find((p) => p.pane_id === s.paneId);
@@ -216,7 +219,7 @@ export default function WorkspaceScreen() {
             onInput={(b) => session.write(b)}
             onGrid={(c, r) => session.setGrid(c, r)}
             onSwipe={swipe}
-            onLongPress={() => paneMap.current?.present()}
+            onSelecting={setSelecting}
             onFontSize={setFontSize}
             onLeaveHistory={() => session.closeHistory()}
             onRemoteScroll={(n, down) => {
@@ -276,31 +279,51 @@ export default function WorkspaceScreen() {
           />
         </View>
 
-        {composing ? (
-          <Composer
-            placeholder={agent ? `Prompt ${agent.name ?? agent.agent}…` : "Run a command…"}
-            onSend={(t) => {
-              session.submit(t);
-              setComposing(false);
-              Keyboard.dismiss();
-            }}
-            onClose={() => setComposing(false)}
-          />
-        ) : (
-          <KeyBar
-            typing={typing}
-            ctrl={ctrl}
-            alt={alt}
-            onCtrl={() => setCtrl(!ctrl)}
-            onAlt={() => setAlt(!alt)}
-            onKey={(b) => session.write(b)}
-            onKeyboard={() => term.current?.focus()}
-            onCompose={() => {
-              term.current?.blur();
-              setComposing(true);
-            }}
-          />
-        )}
+        {/* The selection's actions cover the key bar rather than replace it: a change in height would resize the terminal, which drops the selection. */}
+        <View>
+          {composing ? (
+            <Composer
+              placeholder={agent ? `Prompt ${agent.name ?? agent.agent}…` : "Run a command…"}
+              onSend={(t) => {
+                session.submit(t);
+                setComposing(false);
+                Keyboard.dismiss();
+              }}
+              onClose={() => setComposing(false)}
+            />
+          ) : (
+            <KeyBar
+              typing={typing}
+              ctrl={ctrl}
+              alt={alt}
+              onCtrl={() => setCtrl(!ctrl)}
+              onAlt={() => setAlt(!alt)}
+              onKey={(b) => session.write(b)}
+              onKeyboard={() => term.current?.focus()}
+              onCompose={() => {
+                term.current?.blur();
+                setComposing(true);
+              }}
+            />
+          )}
+          {selecting && (
+            <View className="absolute inset-0 flex-row items-center justify-center gap-2 bg-background">
+              <Pill
+                label="Copy"
+                icon={Copy}
+                tone="brand"
+                height={36}
+                onPress={() => {
+                  void Clipboard.setStringAsync(term.current?.selectedText() ?? "");
+                  term.current?.clearSelection();
+                  toast("Copied");
+                }}
+              />
+              <Pill label="Select all" height={36} onPress={() => term.current?.selectAll()} />
+              <Pill label="Cancel" icon={X} tone="muted" height={36} onPress={() => term.current?.clearSelection()} />
+            </View>
+          )}
+        </View>
         <View style={{ height: keyboardUp ? 0 : insets.bottom }} />
       </KeyboardAvoidingView>
 

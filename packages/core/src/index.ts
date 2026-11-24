@@ -9,6 +9,8 @@ export { Screen } from "./term/screen.ts";
 export { KEY_FIELD_SENTINELS, KeyField, keyFieldEdit } from "./term/keyField.ts";
 export type { KeyFieldEdit } from "./term/keyField.ts";
 export { historyAbove, layoutScrollback } from "./term/scrollback.ts";
+export { ordered, selectionText, wordAt } from "./term/selection.ts";
+export type { Point, TextRows } from "./term/selection.ts";
 export * from "./term/style.ts";
 export * from "./herdr/model.ts";
 export * from "./herdr/api.ts";

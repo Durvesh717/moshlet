@@ -6,22 +6,26 @@ const text = (row: readonly Cell[]) => row.filter((c) => c.width !== 0).map((c) 
 
 describe("layoutScrollback", () => {
   it("keeps the newest rows of a line longer than the history holds", () => {
-    const rows = layoutScrollback(["a".repeat(MAX_HISTORY_ROWS * 40) + "end"], 40);
+    const { rows } = layoutScrollback(["a".repeat(MAX_HISTORY_ROWS * 40) + "end"], 40);
     expect(rows.length).toBe(MAX_HISTORY_ROWS);
     expect(text(rows[rows.length - 1])).toBe("end");
     expect(text(rows[0])).toBe("a".repeat(40));
   });
 
-  it("wraps long lines and keeps blank ones", () => {
-    expect(layoutScrollback(["abcdefghij", "", "xy"], 4).map(text)).toEqual(["abcd", "efgh", "ij", "", "xy"]);
+  it("wraps long lines, keeps blank ones and marks which rows wrap", () => {
+    const { rows, wrapped } = layoutScrollback(["abcdefghij", "", "xy"], 4);
+    expect(rows.map(text)).toEqual(["abcd", "efgh", "ij", "", "xy"]);
+    expect(wrapped).toEqual([true, true, false, false, false]);
   });
 
-  it("adds no blank rows for lines that exactly fill the width", () => {
-    expect(layoutScrollback(["abcd", "efgh"], 4).map(text)).toEqual(["abcd", "efgh"]);
+  it("adds no blank rows and no wraps for lines that exactly fill the width", () => {
+    const { rows, wrapped } = layoutScrollback(["abcd", "efgh"], 4);
+    expect(rows.map(text)).toEqual(["abcd", "efgh"]);
+    expect(wrapped).toEqual([false, false]);
   });
 
   it("keeps colors, drops links and doesn't bleed style across lines", () => {
-    const rows = layoutScrollback(["\x1b[1;31mred\x1b]8;;http://x\x07link\x1b]8;;\x07", "plain"], 20);
+    const { rows } = layoutScrollback(["\x1b[1;31mred\x1b]8;;http://x\x07link\x1b]8;;\x07", "plain"], 20);
     expect(rows.map(text)).toEqual(["redlink", "plain"]);
     expect(rows[0][0].style.fg).toBe(1);
     expect(has(rows[0][0].style, Attr.BOLD)).toBe(true);
@@ -29,13 +33,13 @@ describe("layoutScrollback", () => {
   });
 
   it("lays out emoji presentation two columns wide like herdr", () => {
-    const rows = layoutScrollback(["⚠️ Memory", "⚠ plain"], 20);
+    const { rows } = layoutScrollback(["⚠️ Memory", "⚠ plain"], 20);
     expect([rows[0][0].width, rows[0][1].width, rows[0][3].text]).toEqual([2, 0, "M"]);
     expect([rows[1][0].width, rows[1][2].text]).toEqual([1, "p"]);
   });
 
   it("never loses the oldest rows to wide glyphs wrapping early", () => {
-    const rows = layoutScrollback(Array.from({ length: 50 }, () => "界".repeat(5)), 9);
+    const { rows } = layoutScrollback(Array.from({ length: 50 }, () => "界".repeat(5)), 9);
     expect(rows.length).toBe(100);
     expect(text(rows[0])).toBe("界界界界");
   });

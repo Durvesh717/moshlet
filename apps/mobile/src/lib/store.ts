@@ -1,4 +1,4 @@
-import type { Cell, Link, MoshClient, SessionInfo, Snapshot } from "@moshlet/core";
+import type { Link, MoshClient, SessionInfo, Snapshot, TextRows } from "@moshlet/core";
 import { create } from "zustand";
 import { FONT_SIZE, type TerminalFont } from "../theme";
 import type { HostKey } from "../../modules/moshlet-native/ssh";
@@ -38,7 +38,7 @@ export interface AppState {
   attachError: string | null;
   link: LinkUi | null;
   /** herdr's history above the live screen, laid out for the current width (History button). */
-  scrollback: (readonly Cell[])[];
+  scrollback: TextRows;
   historyMode: boolean;
   fontSize: number;
   termFont: TerminalFont;
@@ -46,6 +46,8 @@ export interface AppState {
   alerts: boolean;
   toast: { id: number; text: string } | null;
 }
+/** No history laid out (outside History mode, or after the width changed). */
+export const NO_SCROLLBACK: TextRows = { rows: [], wrapped: [] };
 
 export const useApp = create<AppState>(() => ({
   hosts: [],
@@ -60,7 +62,7 @@ export const useApp = create<AppState>(() => ({
   attaching: false,
   attachError: null,
   link: null,
-  scrollback: [],
+  scrollback: NO_SCROLLBACK,
   historyMode: false,
   fontSize: FONT_SIZE.default,
   termFont: "JetBrains Mono",
