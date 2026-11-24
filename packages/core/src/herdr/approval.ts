@@ -6,7 +6,9 @@
  * - Claude Code's question forms: a tab per question (and a Submit tab when there is more than one
  *   question or tick-boxes), numbered options, tick-boxes when several may be picked, a row that
  *   takes typed text ("Type something"), and below a rule, "Chat about this";
- * - the form's review, with each answer and Submit answers / Cancel.
+ * - the form's review, with each answer and Submit answers / Cancel;
+ * - omp's ask: one or more questions in a box, radios or tick-boxes under each, picked with the
+ *   arrows (Space ticks a box), then Submit.
  *
  * Anything else falls back to Enter / Esc. The screen may come as plain text or with its colours
  * (ANSI); the colours only tell which form tab is open, since that tab is shown highlighted.
@@ -24,8 +26,10 @@ export interface ApprovalOption {
   checked?: boolean;
   /** Form: the row that takes typed text ("Type something", or what was typed into it). */
   typed?: boolean;
-  /** Form: the Submit row under tick-boxes. */
+  /** Form: the Submit row under tick-boxes. omp's ask: its Submit row. */
   submit?: boolean;
+  /** omp's ask: a tick-box, ticked with Space (Enter would move on). */
+  toggle?: boolean;
   /** Form: under the rule ("Chat about this"). */
   extra?: boolean;
 }
@@ -50,6 +54,8 @@ export interface ApprovalPrompt {
   tab?: number;
   /** Form: several options may be ticked. */
   multi?: boolean;
+  /** omp's ask: picking a choice only marks it, and the dialog stays until Submit. */
+  stays?: boolean;
   /** Review: each question with its answer. */
   answers?: { question: string; answer: string }[];
 }
@@ -64,7 +70,7 @@ interface Line {
   marked: boolean[];
 }
 
-const CURSOR = "❯›>▶";
+const CURSOR = "❯›>▶\uf054";
 const OPTION = /^(?:([❯›>▶●*])\s*)?(\d)[.)]\s+(.+)$/u;
 const RULE_ONLY = /^[─━╌┄┈═\s]+$/u;
 const BOX_EDGE = /^[╭╰├┌└╞╘]/u;
@@ -375,7 +381,36 @@ function parseForm(ls: Line[], live: Found[]): ApprovalPrompt | null {
   return { kind: "form", question, options, cursor, parsed: true, tabs: bar.tabs, tab: bar.tab, multi };
 }
 
-/** A list with a ❯ on one line and no digits; the hint under it says Enter picks. */
+/** A radio or tick-box before an arrow list's label: ticked or not, and whether it is a tick-box. */
+const MARK: Record<string, { checked: boolean; toggle: boolean }> = {
+  "○": { checked: false, toggle: false },
+  "◯": { checked: false, toggle: false },
+  "\uf10c": { checked: false, toggle: false },
+  "◉": { checked: true, toggle: false },
+  "●": { checked: true, toggle: false },
+  "\uf192": { checked: true, toggle: false },
+  "☐": { checked: false, toggle: true },
+  "\uf096": { checked: false, toggle: true },
+  "☒": { checked: true, toggle: true },
+  "☑": { checked: true, toggle: true },
+  "\uf046": { checked: true, toggle: true },
+  "\uf14a": { checked: true, toggle: true },
+};
+
+/** An arrow list's row: its label, and its radio or tick-box when it has one. */
+function row(text: string): ApprovalOption {
+  const m = /^(\S)\s+(.*)$/u.exec(text);
+  const mark = m ? MARK[m[1]] : undefined;
+  if (m && mark) return { keys: [], label: m[2].replace(/\s+/g, " "), number: null, checked: mark.checked, ...(mark.toggle ? { toggle: true } : {}) };
+  return { keys: [], label: (/^[•◦]\s+/u.test(text) ? text.replace(/^[•◦]\s+/u, "") : text).replace(/\s+/g, " "), number: null };
+}
+
+/**
+ * A list with a ❯ on one line and no digits; the hint under it says Enter (or a pick) answers.
+ * Inside a box with no rule between its top and the cursor (omp's ask), the box can hold several
+ * questions: each one's line, then its choices, and a Submit row at the end. The cursor moves
+ * through all of them in order.
+ */
 function parseArrows(ls: Line[]): ApprovalPrompt | null {
   let at = -1;
   for (let i = ls.length - 1; i >= 0; i--) {
@@ -390,31 +425,51 @@ function parseArrows(ls: Line[]): ApprovalPrompt | null {
   const col = marked.indent + (Array.from(marked.text).length - Array.from(body).length);
   const sibling = (l: Line) => !l.rule && l.text !== "" && l.indent === col;
   const nested = (l: Line) => !l.rule && l.text !== "" && l.indent > col;
+
+  let ruleAbove = at - 1;
+  while (ruleAbove >= 0 && !ls[ruleAbove].rule) ruleAbove--;
+  const boxed = ruleAbove >= 0 && ls[ruleAbove].text.startsWith("╭");
   let top = at;
-  while (top > 0 && (sibling(ls[top - 1]) || nested(ls[top - 1]))) top--;
-  while (top < at && !sibling(ls[top])) top++;
   let bottom = at;
-  while (bottom + 1 < ls.length && (sibling(ls[bottom + 1]) || nested(ls[bottom + 1]))) bottom++;
+  const headers: string[] = [];
+  if (boxed) {
+    top = ruleAbove + 1;
+    while (bottom + 1 < ls.length && !ls[bottom + 1].rule) bottom++;
+  } else {
+    while (top > 0 && (sibling(ls[top - 1]) || nested(ls[top - 1]))) top--;
+    while (top < at && !sibling(ls[top])) top++;
+    while (bottom + 1 < ls.length && (sibling(ls[bottom + 1]) || nested(ls[bottom + 1]))) bottom++;
+  }
 
   const options: ApprovalOption[] = [];
   let cursor = -1;
-  const label = (t: string) => t.replace(/^[○◉●◯•◦]\s+/u, "");
   for (let i = top; i <= bottom; i++) {
     const l = ls[i];
-    if (i === at) {
-      cursor = options.length;
-      options.push({ keys: [], label: label(body), number: null });
-    } else if (sibling(l)) options.push({ keys: [], label: label(l.text), number: null });
-    else if (options.length > 0) {
+    if (l.text === "") continue;
+    if (i === at || sibling(l)) {
+      if (i === at) cursor = options.length;
+      const text = i === at ? body : l.text;
+      options.push(boxed && text === "Submit" ? { keys: [], label: "Submit", number: null, submit: true } : row(text));
+    } else if (nested(l) && options.length > 0) {
       const o = options[options.length - 1];
       o.detail = o.detail ? `${o.detail} ${l.text}` : l.text;
-    }
+    } else if (boxed && l.indent < col) headers.push(l.text);
   }
   if (options.length < 2) return null;
   const after = ls.slice(bottom + 1).filter((l) => !l.rule && l.text !== "");
-  if (after.length > 4 || !after.some((l) => /enter|⏎|select|confirm/i.test(l.text))) return null;
-  if (after.some((l) => /\besc\b|⎋/i.test(l.text))) options.push({ keys: ["esc"], label: "Cancel (Esc)", number: null });
-  return { kind: "arrows", question: above(ls, top, 5), options, cursor, parsed: true };
+  if (after.length > 4 || !after.some((l) => /enter|⏎|select|confirm|choose|submit|toggle/i.test(l.text))) return null;
+  if (after.some((l) => /\besc\b|⎋|\bcancel\b/i.test(l.text))) options.push({ keys: ["esc"], label: "Cancel (Esc)", number: null });
+  const stays = options.some((o) => o.submit);
+  const question = boxed && headers.length > 0 ? headers.slice(-4) : above(ls, top, 5);
+  return {
+    kind: "arrows",
+    question,
+    options,
+    cursor,
+    parsed: true,
+    ...(stays ? { stays: true } : {}),
+    ...(options.some((o) => o.toggle) ? { multi: true } : {}),
+  };
 }
 
 /**
@@ -428,10 +483,11 @@ export function samePrompt(a: ApprovalPrompt, b: ApprovalPrompt): boolean {
       p.kind,
       p.parsed,
       p.question,
-      p.options.map((o) => [o.keys, o.label, o.detail ?? null, o.checked ?? null, o.typed ?? false, o.submit ?? false, o.extra ?? false]),
+      p.options.map((o) => [o.keys, o.label, o.detail ?? null, o.checked ?? null, o.typed ?? false, o.submit ?? false, o.extra ?? false, o.toggle ?? false]),
       p.tabs ?? null,
       p.tab ?? null,
       p.multi ?? null,
+      p.stays ?? null,
       p.answers ?? null,
     ]);
   return text(a) === text(b);

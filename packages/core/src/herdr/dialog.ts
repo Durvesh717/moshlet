@@ -4,7 +4,7 @@ import { isPlaceholder, parseApproval, samePrompt, type ApprovalPrompt } from ".
 export interface DialogIO {
   /** The pane's screen; with its colours (ANSI) when it can, so a form's open tab shows. */
   read(): Promise<string>;
-  /** Key names as herdr takes them: "1", "enter", "esc", "up", "down", "left", "right", "backspace". */
+  /** Key names as herdr takes them: "1", "enter", "esc", "space", "up", "down", "left", "right", "backspace". */
   keys(keys: string[]): Promise<void>;
   /** Text typed as it is, without Enter. */
   type(text: string): Promise<void>;
@@ -12,7 +12,7 @@ export interface DialogIO {
 }
 
 export type DialogStep =
-  /** Pick an option: its digit, or the cursor moved onto it and Enter. */
+  /** Pick an option: its digit, or the cursor moved onto it and Enter (Space for a tick-box). */
   | { do: "choose"; option: number }
   /** Put text in a form's "Type something" row (for one answer, that also picks it). */
   | { do: "type"; option: number; text: string }
@@ -97,7 +97,8 @@ export async function answerDialog(io: DialogIO, shown: ApprovalPrompt, step: Di
         return { ok: true, prompt: now };
       }
       if (!(await moveTo(step.option))) return stuck();
-      await press(["enter"]);
+      // A tick-box in omp's ask ticks with Space; Enter would move on to the next question.
+      await press([option.toggle ? "space" : "enter"]);
       return { ok: true, prompt: now };
     }
 

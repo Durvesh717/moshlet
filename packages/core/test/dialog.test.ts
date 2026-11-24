@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseApproval } from "../src/herdr/approval.ts";
 import { answerDialog } from "../src/herdr/dialog.ts";
-import { FakeArrows, FakeForm, type FakeDialog } from "./support/dialogs.ts";
+import { FakeArrows, FakeAsk, FakeForm, type FakeDialog } from "./support/dialogs.ts";
 
 const timing = { settleMs: 20, pollMs: 1 };
 const shown = (d: FakeDialog) => parseApproval(d.screen());
@@ -78,6 +78,46 @@ describe("answerDialog: arrow lists", () => {
     const r = await answerDialog(d, p, { do: "choose", option: 2 }, timing);
     expect(r.ok).toBe(false);
     expect(d.sent).not.toContain("enter");
+  });
+});
+
+describe("answerDialog: omp's ask", () => {
+  const db = { text: "Which database?", options: ["Postgres", "SQLite", "MySQL"] };
+  const extras = { text: "Which extras?", options: ["Auth", "Logging", "Metrics"], multi: true };
+
+  it("picks a radio with Enter, and the ask stays for Submit", async () => {
+    const d = new FakeAsk([db]);
+    let r = await answerDialog(d, shown(d), { do: "choose", option: 1 }, timing);
+    expect(d.sent).toEqual(["down", "enter"]);
+    expect(r.ok && r.prompt.stays).toBe(true);
+    expect(r.prompt.options.filter((o) => o.checked).map((o) => o.label)).toEqual(["SQLite"]);
+    expect(r.prompt.cursor).toBe(r.prompt.options.findIndex((o) => o.submit));
+    r = await answerDialog(d, r.prompt, { do: "choose", option: r.prompt.options.findIndex((o) => o.submit) }, timing);
+    expect(r.ok).toBe(true);
+    expect(d.submitted).toBe(true);
+    expect(d.picked).toEqual([1]);
+  });
+
+  it("ticks a box with Space and stays on it", async () => {
+    const d = new FakeAsk([db, extras]);
+    // Postgres, SQLite, MySQL, then Auth (3), Logging (4), Metrics (5), then Submit.
+    let r = await answerDialog(d, shown(d), { do: "choose", option: 5 }, timing);
+    expect(d.sent).toEqual(["down", "down", "down", "down", "down", "space"]);
+    expect(r.ok && r.prompt.cursor).toBe(5);
+    r = await answerDialog(d, r.prompt, { do: "choose", option: 3 }, timing);
+    expect(r.prompt.options.filter((o) => o.checked).map((o) => o.label)).toEqual(["Postgres", "Auth", "Metrics"]);
+    r = await answerDialog(d, r.prompt, { do: "choose", option: r.prompt.options.findIndex((o) => o.submit) }, timing);
+    expect(d.submitted).toBe(true);
+    expect([...d.ticks[1]].sort()).toEqual([0, 2]);
+  });
+
+  it("sends nothing when a box was ticked on the computer since it was shown", async () => {
+    const d = new FakeAsk([db, extras]);
+    const p = shown(d);
+    d.ticks[1].add(1);
+    const r = await answerDialog(d, p, { do: "choose", option: 5 }, timing);
+    expect(r).toMatchObject({ ok: false, why: "changed" });
+    expect(d.sent).toEqual([]);
   });
 });
 

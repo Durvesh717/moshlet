@@ -12,7 +12,7 @@ import {
   type Snapshot,
 } from "@moshlet/core";
 import { BottomSheetBackdrop, BottomSheetModal, BottomSheetScrollView, BottomSheetTextInput, type BottomSheetBackdropProps } from "@gorhom/bottom-sheet";
-import { Bot, Check, ChevronLeft, ChevronRight, Columns2, MessageCircle, Pencil, Rows2, Send, Square, SquareCheck, Trash2, type LucideIcon } from "lucide-react-native";
+import { Bot, Check, ChevronLeft, ChevronRight, Circle, CircleDot, Columns2, MessageCircle, Pencil, Rows2, Send, Square, SquareCheck, Trash2, type LucideIcon } from "lucide-react-native";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, type TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -141,6 +141,9 @@ export const ApprovalSheet = forwardRef<
           } else if (isForm(shownPrompt) && isForm(r.prompt)) {
             setPrompt(r.prompt);
             if (step.do === "type") setReply("");
+          } else if (shownPrompt.stays && r.prompt.stays) {
+            // omp's ask: a pick only marks the choice; the sheet stays until Submit.
+            setPrompt(r.prompt);
           } else latest.current.onDone();
         },
         () => n === reads.current && setNotice("Couldn't reach the computer, so nothing more was sent."),
@@ -240,11 +243,16 @@ export const ApprovalSheet = forwardRef<
                     ))}
                   </View>
                 )}
+                {prompt.stays && (
+                  <Text className="text-sm text-muted-foreground">{prompt.multi ? "Pick or tick your answers, then Submit." : "Pick an answer, then Submit."}</Text>
+                )}
                 {prompt.options.map((o, i) => (
                   <Choice
                     key={`${i}-${o.label}`}
                     option={o}
-                    primary={prompt.kind === "arrows" ? i === prompt.options.findIndex((x) => !isNegative(x)) : i === 0}
+                    primary={
+                      prompt.stays ? !!o.submit : prompt.kind === "arrows" ? i === prompt.options.findIndex((x) => !isNegative(x)) : i === 0
+                    }
                     disabled={checking}
                     onPress={() => run({ do: "choose", option: i })}
                   />
@@ -299,6 +307,13 @@ function Choice(props: { option: ApprovalOption; primary: boolean; disabled: boo
       )}
     >
       {o.number && <Text className={cn("font-mono text-sm", primary ? "text-primary-foreground" : "text-muted-foreground")}>{o.number}</Text>}
+      {o.checked !== undefined && (
+        <Icon
+          as={o.toggle ? (o.checked ? SquareCheck : Square) : o.checked ? CircleDot : Circle}
+          size={20}
+          className={o.checked ? "text-primary" : "text-muted-foreground"}
+        />
+      )}
       <Text
         className={cn("flex-1 text-base", primary ? "font-semibold text-primary-foreground" : negative ? "font-medium text-destructive" : "font-medium text-foreground")}
       >

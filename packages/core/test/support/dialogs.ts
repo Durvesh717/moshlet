@@ -64,6 +64,68 @@ export class FakeArrows extends FakeDialog {
   }
 }
 
+/**
+ * omp's ask: questions in a box, each with radios (Enter picks one and moves on) or tick-boxes
+ * (Space ticks, the cursor stays), then Submit. Drawn with the Nerd Font marks omp uses.
+ */
+export class FakeAsk extends FakeDialog {
+  cursor = 0;
+  submitted = false;
+  cancelled = false;
+  questions: { text: string; options: string[]; multi?: boolean }[];
+  picked: (number | null)[];
+  ticks: Set<number>[];
+
+  constructor(questions: { text: string; options: string[]; multi?: boolean }[]) {
+    super();
+    this.questions = questions;
+    this.picked = questions.map((q) => (q.multi ? null : 0));
+    this.ticks = questions.map(() => new Set());
+  }
+
+  /** Every row the cursor goes through: [question, option], then Submit as [-1, -1]. */
+  private rows(): [number, number][] {
+    return [...this.questions.flatMap((q, qi) => q.options.map((_, oi) => [qi, oi] as [number, number])), [-1, -1]];
+  }
+
+  screen(): string {
+    if (this.submitted || this.cancelled) return "● Done.";
+    const out = ["╭─ Ask " + "─".repeat(40) + "╮"];
+    let r = 0;
+    this.questions.forEach((q, qi) => {
+      if (qi > 0) out.push("│");
+      out.push(`│ ${q.text}`);
+      q.options.forEach((o, oi) => {
+        const on = q.multi ? this.ticks[qi].has(oi) : this.picked[qi] === oi;
+        const mark = q.multi ? (on ? "\uf14a" : "\uf096") : on ? "\uf192" : "\uf10c";
+        out.push(`│ ${r++ === this.cursor ? "\uf054" : " "} ${mark} ${o}`);
+      });
+    });
+    out.push("│", `│ ${r === this.cursor ? "\uf054" : " "} Submit`, "├" + "─".repeat(46) + "┤", "│ \u{f0311} choose · ↑/↓ move · \u{f12b7} cancel", "╰" + "─".repeat(46) + "╯");
+    // Both side walls, as omp draws them.
+    return out.map((l) => (l.startsWith("│") ? `${l.padEnd(47)}│` : l)).join("\n");
+  }
+
+  protected override key(k: string): void {
+    if (this.submitted || this.cancelled) return;
+    const rows = this.rows();
+    const [qi, oi] = rows[this.cursor];
+    if (k === "down") this.cursor = Math.min(rows.length - 1, this.cursor + 1);
+    else if (k === "up") this.cursor = Math.max(0, this.cursor - 1);
+    else if (k === "esc") this.cancelled = true;
+    else if (k === "space" && qi >= 0 && this.questions[qi].multi) {
+      if (!this.ticks[qi].delete(oi)) this.ticks[qi].add(oi);
+    } else if (k === "enter") {
+      if (qi < 0) this.submitted = true;
+      else if (this.questions[qi].multi) this.cursor = rows.findIndex(([q]) => q === qi + 1 || q === -1);
+      else {
+        this.picked[qi] = oi;
+        this.cursor = rows.findIndex(([q]) => q === qi + 1 || q === -1);
+      }
+    }
+  }
+}
+
 export interface FakeQuestion {
   header: string;
   text: string;

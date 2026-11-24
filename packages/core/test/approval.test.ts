@@ -122,6 +122,47 @@ describe("parseApproval: arrow lists", () => {
     expect(samePrompt(a, b)).toBe(true);
   });
 
+  it("reads omp's newer ask: radios, Submit, and the question as its header", () => {
+    const p = parseApproval(screen("omp-ask-boxed", "txt"));
+    expect(p.kind).toBe("arrows");
+    expect(p.question).toEqual(["Which database?"]);
+    expect(p.options.map((o) => o.label)).toEqual(["Postgres", "SQLite", "MySQL", "Other: type your own", "Submit", "Cancel (Esc)"]);
+    expect(p.options.slice(0, 4).map((o) => o.checked)).toEqual([true, false, false, false]);
+    expect(p.options[4].submit).toBe(true);
+    expect(p.cursor).toBe(0);
+    expect(p.stays).toBe(true);
+    expect(p.multi).toBeUndefined();
+  });
+
+  it("follows omp's ask as the cursor moves and a choice is picked", () => {
+    const a = parseApproval(screen("omp-ask-boxed", "txt"));
+    const down = parseApproval(screen("omp-ask-boxed-down", "txt"));
+    expect(down.cursor).toBe(1);
+    expect(samePrompt(a, down)).toBe(true);
+    const picked = parseApproval(screen("omp-ask-boxed-picked", "txt"));
+    expect(picked.cursor).toBe(4);
+    expect(picked.options.filter((o) => o.checked).map((o) => o.label)).toEqual(["SQLite"]);
+  });
+
+  it("reads the live ask, not the summary of it drawn above", () => {
+    const p = parseApproval(screen("omp-ask-boxed-screen", "txt"));
+    expect(p.question).toEqual(["Which database?"]);
+    expect(p.options.map((o) => o.label)).toContain("Submit");
+  });
+
+  it("reads omp's ask with two questions as one list, tick-boxes included", () => {
+    const p = parseApproval(screen("omp-ask-two", "txt"));
+    expect(p.question).toEqual(["Which database?", "Which extras?"]);
+    expect(p.options.map((o) => o.label)).toEqual(["Postgres", "SQLite", "MySQL", "Other: type your own", "Auth", "Logging", "Metrics", "Other: type your own", "Submit", "Cancel (Esc)"]);
+    expect(p.options.map((o) => o.toggle ?? false)).toEqual([false, false, false, false, true, true, true, true, false, false]);
+    expect(p.multi).toBe(true);
+    expect(parseApproval(screen("omp-ask-two-extras", "txt")).cursor).toBe(6);
+    const ticked = parseApproval(screen("omp-ask-two-ticked", "txt"));
+    expect(ticked.cursor).toBe(6);
+    expect(ticked.options[6].checked).toBe(true);
+    expect(samePrompt(parseApproval(screen("omp-ask-two-extras", "txt")), ticked)).toBe(false);
+  });
+
   it("needs a hint that Enter picks, so a quoted message isn't taken for a list", () => {
     const p = parseApproval(["❯ Fix the login bug", "  and then run the tests", "", "● Looking at the code…"].join("\n"));
     expect(p.kind).toBe("unknown");
